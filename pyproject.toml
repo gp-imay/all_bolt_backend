@@ -1,0 +1,29 @@
+[tool.poetry]
+name = "all-bolt-backend"
+version = "0.1.0"
+description = ""
+authors = ["Imaya <info.greasepencil@gmail.com>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.12"
+fastapi = {extras = ["standard"], version = "^0.115.8"}
+python-jose = {extras = ["cryptography"], version = "^3.3.0"}
+ipython = "^8.32.0"
+supabase = "^2.13.0"
+pyjwt = "^2.10.1"
+uvicorn = "^0.34.0"
+python-multipart = "^0.0.20"
+sqlalchemy = "^2.0.38"
+alembic = "^1.14.1"
+psycopg2-binary = "^2.9.10"
+python-dotenv = "^1.0.1"
+pydantic = {extras = ["email"], version = "^2.10.6"}
+asyncpg = "^0.30.0"
+pydantic-settings = "^2.7.1"
+azure-storage-blob = "^12.24.1"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
