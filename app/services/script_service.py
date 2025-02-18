@@ -99,3 +99,10 @@ class ScriptService:
             .offset(skip)\
             .limit(limit)\
             .all()
+
+    @staticmethod
+    def has_beat_sheet(db: Session, script_id: UUID) -> bool:
+        """
+        Check if a script has an associated beat sheet
+        """
+        return db.query(Beat).filter(Beat.script_id == script_id).first() is not None

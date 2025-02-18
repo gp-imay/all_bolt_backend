@@ -4,12 +4,24 @@ from datetime import datetime
 from typing import Optional, Union
 from uuid import UUID
 
+from enum import Enum
+
+class ScriptCreationMethod(str, Enum):
+    FROM_SCRATCH = "FROM_SCRATCH"
+    WITH_AI = "WITH_AI"
+    UPLOAD = "UPLOAD"
 
 class ScriptBase(BaseModel):
     title: str = Field(..., min_length=1, max_length=255, description="Main title of the movie script")
     subtitle: Optional[str] = Field(None, max_length=255, description="Subtitle or tagline of the movie")
     genre: str = Field(..., max_length=100, description="Genre of the movie (free-form)")
     story: str = Field(..., min_length=1, description="Main story or synopsis of the movie")
+    creation_method: ScriptCreationMethod = Field(
+        default=ScriptCreationMethod.FROM_SCRATCH,
+        description="Method used to create the script"
+    )
+
+
 
 
 class ScriptBaseForUI(BaseModel):

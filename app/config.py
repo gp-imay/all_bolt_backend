@@ -60,6 +60,18 @@ class Settings(BaseSettings):
     LOG_LEVEL: str = "INFO"
     LOG_FORMAT: str = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 
+    AZURE_OPENAI_ENDPOINT: str
+    AZURE_OPENAI_API_KEY: str
+    AZURE_OPENAI_API_VERSION: str = "2024-09-12"
+    AZURE_OPENAI_DEPLOYMENT_NAME: str
+    AZURE_OPENAI_MAX_TOKENS: int = 65000
+    AZURE_OPENAI_TEMPERATURE: float = 1
+
+    DEBUG: bool = False
+    ENVIRONMENT: str = "development"  # Can be "development", "staging", "production"
+    ENABLE_TEST_ENDPOINTS: bool = False  # Specific flag for test endpoints
+
+
     class Config:
         env_file = ".env"
         case_sensitive = True
