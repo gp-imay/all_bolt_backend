@@ -4,9 +4,18 @@ from sqlalchemy import desc
 from fastapi import HTTPException, status
 from typing import List, Optional
 from uuid import UUID
+import traceback
+import logging
 
-from models.script import Script
+logger = logging.getLogger(__name__)
+
+from models.script import Script, ScriptCreationMethod
+from models.beats import Beat, MasterBeatSheet, BeatSheetType, ActEnum
 from schemas.script import ScriptCreate, ScriptUpdate
+from schemas.beat import ScriptWithBeatsResponse, BeatResponse
+
+from services.openai_service import AzureOpenAIService
+
 
 class ScriptService:
     @staticmethod
@@ -106,3 +115,80 @@ class ScriptService:
         Check if a script has an associated beat sheet
         """
         return db.query(Beat).filter(Beat.script_id == script_id).first() is not None
+
+    @staticmethod
+    def create_script_with_beats(
+        db: Session, 
+        script: ScriptCreate, 
+        user_id: UUID
+    ) -> ScriptWithBeatsResponse:
+        try:
+            # Start transaction
+            db_script = Script(
+                **script.model_dump(),
+                user_id=user_id
+            )
+            db.add(db_script)
+            db.flush()  # Get script ID without committing
+
+            # Get master beat sheet ID for Blake Snyder
+            master_beat_sheet = db.query(MasterBeatSheet).filter(
+                MasterBeatSheet.beat_sheet_type == BeatSheetType.BLAKE_SNYDER
+            ).first()
+            if not master_beat_sheet:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Master beat sheet not found"
+                )
+
+            # Generate beats using OpenAI
+            openai_service = AzureOpenAIService()
+            generated_beats = openai_service.generate_beat_sheet(
+                title=script.title,
+                subtitle=script.subtitle or "",
+                genre=script.genre,
+                story=script.story
+            )
+
+            # Create beat records
+            db_beats = []
+            for i, beat in enumerate(generated_beats, 1):
+                db_beat = Beat(
+                    script_id=db_script.id,
+                    master_beat_sheet_id=master_beat_sheet.id,
+                    position=i,
+                    beat_title=beat.beat_title,
+                    beat_description=beat.description,
+                    beat_act=ActEnum(beat.act)  # Add the act from the model response
+                )
+                
+                # Store complete JSON only for first beat
+                if i == 1:
+                    db_beat.complete_json = [b.model_dump() for b in generated_beats]
+                
+                db_beats.append(db_beat)
+                db.add(db_beat)
+
+            # Commit transaction
+            db.commit()
+            
+            # Prepare response
+            return ScriptWithBeatsResponse(
+                script=db_script,
+                beats=[BeatResponse(
+                    position=beat.position,
+                    beat_title=beat.beat_title,
+                    beat_description=beat.beat_description,
+                    beat_id=beat.id,
+                    beat_act=beat.beat_act,
+                    script_id=beat.script_id
+                ) for beat in db_beats]
+            )
+
+        except Exception as e:
+            logger.error(traceback.format_exc())
+            db.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Error creating script with beats: {str(e)}"
+            )

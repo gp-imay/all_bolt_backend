@@ -1,13 +1,21 @@
 # app/services/openai_service.py
 import json
 import logging
-from typing import List
+from enum import Enum
+from typing import List, Generator
 from pydantic import BaseModel
 from instructor import from_openai, Mode
 from openai import AzureOpenAI
 from config import settings
 
 logger = logging.getLogger(__name__)
+
+
+class ActEnum(str, Enum):
+    act_1 = "act_1"
+    act_2a = "act_2a"
+    act_2b = "act_2b"
+    act_3 = "act_3"
 
 
 class Beat(BaseModel):
@@ -17,6 +25,7 @@ class Beat(BaseModel):
     description: str
     page_length: str
     timing: str
+    act: ActEnum
 
 
 class AzureOpenAIService:
@@ -69,7 +78,41 @@ class AzureOpenAIService:
         ]
 
         return self._make_request(messages)
+    def generate_beat_sheet_stream(
+        self, title: str, subtitle: str, genre: str, story: str
+    ) -> Generator[List[Beat], None, None]:
+        system_prompt = (
+            "You are an expert screenplay writer specializing in Blake Snyder's 'Save the Cat!' beat sheet structure. "
+            "Generate a detailed beat sheet with exactly 15 beats. For each beat, provide:\n"
+            "1. Beat number (1-15)\n"
+            "2. Beat name\n"
+            "3. Description tailored to the given story\n"
+            "4. Suggested page length\n"
+            "5. Timing (in terms of script percentage)\n"
+            "Format the response as a JSON object with an array of beats."
+        )
 
+        user_prompt = (
+            f"Create a 'Save the Cat!' beat sheet for a screenplay with the following details:\n"
+            f"Title: {title}\n"
+            f"Subtitle: {subtitle}\n"
+            f"Genre: {genre}\n"
+            f"Story: {story}"
+        )
+
+        messages = [
+            {"role": "user", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ]
+
+        # Use create_partial to stream progress; each yield is a partial List[Beat]
+        return self.client.chat.completions.create_partial(
+            model=self.deployment_name,
+            messages=messages,
+            response_model=List[Beat],
+            max_tokens=settings.AZURE_OPENAI_MAX_TOKENS,
+            temperature=settings.AZURE_OPENAI_TEMPERATURE,
+        )
 # class AzureOpenAIService:
 #     def __init__(self):
 #         self.endpoint = settings.AZURE_OPENAI_ENDPOINT

@@ -3,6 +3,9 @@ from typing import Optional, Dict, List
 from datetime import datetime
 from enum import Enum
 
+
+from schemas.script import ScriptOut
+
 class BeatSheetType(str, Enum):
     BLAKE_SNYDER = "Blake Snyder's Beat Sheet (Save the Cat!)"
     HERO_JOURNEY = "The Hero's Journey (Joseph Campbell / Christopher Vogler)"
@@ -59,3 +62,17 @@ class ScriptBeatSheet(BaseModel):
     beats: List[Beat]
     master_beat_sheet_id: UUID4
     beat_sheet_type: BeatSheetType
+
+
+class BeatResponse(BaseModel):
+    position: int
+    beat_title: str
+    beat_description: str
+    beat_id: UUID4
+    beat_act: str
+    script_id: UUID4
+    
+class ScriptWithBeatsResponse(BaseModel):
+    script: ScriptOut
+    beats: List[BeatResponse]
+

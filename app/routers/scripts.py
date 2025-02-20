@@ -18,6 +18,7 @@ from services.script_service import ScriptService
 from services.azure_service import AzureStorageService
 from auth.dependencies import get_current_user
 from schemas.user import User
+from schemas.beat import ScriptWithBeatsResponse
 
 router = APIRouter()
 
@@ -143,3 +144,18 @@ async def upload_script_file(
         script_id=script_id,
         script_update=script_update
     )
+
+
+@router.post("/with-ai", response_model=ScriptWithBeatsResponse, tags=["AI User Flow"])
+async def create_script_with_ai(
+    script: ScriptCreate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Create a new script with AI-generated beat sheet"""
+    return ScriptService.create_script_with_beats(
+        db=db, 
+        script=script, 
+        user_id=current_user.id
+    )
+

@@ -6,8 +6,9 @@ from uuid import UUID
 import logging
 
 from models.script import Script
-from models.beat import Beat, MasterBeatSheet, BeatSheetType
+from models.beats import Beat, MasterBeatSheet, BeatSheetType
 from schemas.beat import BeatCreate, BeatUpdate
+from schemas.script import ScriptCreationMethod
 
 logger = logging.getLogger(__name__)
 
@@ -167,3 +168,61 @@ class BeatSheetService:
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail=f"Error deleting beat sheet: {str(e)}"
             )
+        
+    @staticmethod
+    def get_script_beatsheet(
+        db: Session,
+        script_id: UUID,
+        user_id: UUID
+    ) -> List[Beat]:
+        """
+        Get and validate a script's beat sheet
+        """
+        # Get script and verify ownership
+        script = db.query(Script).filter(
+            and_(
+                Script.id == script_id,
+                Script.user_id == user_id
+            )
+        ).first()
+        
+        if not script:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Script not found or unauthorized access"
+            )
+        
+        # Verify script was created with AI
+        if script.creation_method != ScriptCreationMethod.WITH_AI:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Script was not created with AI assistance"
+            )
+        
+        # Get beats and master beat sheet info
+        beats_query = db.query(
+            Beat, MasterBeatSheet.number_of_beats
+        ).join(
+            MasterBeatSheet,
+            Beat.master_beat_sheet_id == MasterBeatSheet.id
+        ).filter(
+            Beat.script_id == script_id
+        )
+        
+        beats = [beat for beat, _ in beats_query.all()]
+        if not beats:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Beat sheet not found"
+            )
+        
+        required_beats = beats_query.first()[1]  # Get number_of_beats from first result
+        
+        # Verify completeness
+        if len(beats) < required_beats:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Beat sheet generation is incomplete. Expected {required_beats} beats, found {len(beats)}"
+            )
+        
+        return sorted(beats, key=lambda x: x.position)
