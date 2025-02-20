@@ -1,9 +1,18 @@
-from sqlalchemy import Column, String, DateTime, ForeignKey, Text, JSON, Enum, Integer, UniqueConstraint
+from sqlalchemy import Column, String, DateTime, ForeignKey, Text, JSON, Enum, Integer, UniqueConstraint, Float, Boolean
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from models.base import UUIDModel
 import enum
+
+class SoftDeleteMixin:
+    deleted_at = Column(DateTime(timezone=True), nullable=True)
+    is_deleted = Column(Boolean, default=False)
+
+    def soft_delete(self):
+        self.deleted_at = func.now()
+        self.is_deleted = True
+
 
 class BeatSheetType(str, enum.Enum):
     BLAKE_SNYDER = "Blake Snyder's Beat Sheet (Save the Cat!)"
@@ -20,6 +29,13 @@ class ActEnum(str, enum.Enum):
     act_2b = "act_2b"
     act_3 = "act_3"
 
+class SceneGenerationStatus(str, enum.Enum):
+    NOT_STARTED = "not_started"
+    IN_PROGRESS = "in_progress"
+    COMPLETED = "completed"
+    FAILED = "failed"
+
+
 class MasterBeatSheet(UUIDModel):
     __tablename__ = "master_beat_sheets"
 
@@ -34,7 +50,7 @@ class MasterBeatSheet(UUIDModel):
     # Relationship with Beat
     beats = relationship("Beat", back_populates="master_beat_sheet")
 
-class Beat(UUIDModel):
+class Beat(UUIDModel, SoftDeleteMixin):
     __tablename__ = "beats"
 
     script_id = Column(UUID(as_uuid=True), ForeignKey("scripts.id", ondelete="CASCADE"), nullable=False)
@@ -47,11 +63,13 @@ class Beat(UUIDModel):
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
     beat_act = Column(Enum(ActEnum), nullable=False)
     complete_json = Column(JSONB, nullable=True)
-    # dummy_column = Column(Boolean, default=False)
 
     # Relationships
     script = relationship("Script", back_populates="beats")
     master_beat_sheet = relationship("MasterBeatSheet", back_populates="beats")
+    scenes = relationship("Scene", back_populates="beat", cascade="all, delete-orphan")
+    generation_attempts = relationship("SceneGenerationTracker", back_populates="beat")
+
     # user = relationship("User", back_populates="beats")  # Added relationship to user
 
     __table_args__ = (
@@ -59,10 +77,61 @@ class Beat(UUIDModel):
         UniqueConstraint('script_id', 'beat_title', name='unique_beat_title_per_script'),
     )
 
-    #   "beat_number": 1,
-    #   "beat_name": "Opening Image",
-    #   "beat_title": "Circle of Change",
-    #   "description": "The film opens with an awe-inspiring sunrise over a modern Serengeti, symbolizing rebirth. We see a bustling pride of lions, their hierarchy intact, with King Mufasa overseeing the land. Young Simba is introduced as a playful cub who dreams of ruling someday. The scene sets the tone, contrasting tradition with the idea of an impending transformation.",
-    #   "page_length": "1-3",
-    #   "timing": "1%",
-    #   "act": "act_1"
+
+class Scene(UUIDModel, SoftDeleteMixin):
+    __tablename__ = "scenes"
+
+    beat_id = Column(UUID(as_uuid=True), ForeignKey("beats.id", ondelete="CASCADE"), nullable=False)
+    position = Column(Float, nullable=False)  # Float for flexible ordering
+    scene_heading = Column(String(1000), nullable=False)  # Longer length for detailed headings
+    scene_description = Column(Text, nullable=False)
+    dialogue_blocks = Column(JSONB, nullable=True)
+    estimated_duration = Column(Float, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    # Relationships
+    beat = relationship("Beat", back_populates="scenes")
+
+    __table_args__ = (
+        UniqueConstraint('beat_id', 'position', 'is_deleted', name='unique_position_per_beat'),
+    )
+
+    @classmethod
+    def calculate_position(cls, db, beat_id, target_position: float) -> float:
+        """Calculate a new position value between two existing positions"""
+        positions = db.query(cls.position)\
+            .filter(cls.beat_id == beat_id, cls.is_deleted.is_(False))\
+            .order_by(cls.position)\
+            .all()
+        positions = [p[0] for p in positions]
+        
+        if not positions:
+            return 1000.0  # First item
+            
+        if target_position <= positions[0]:
+            return positions[0] - 1000.0  # Position before first
+            
+        if target_position >= positions[-1]:
+            return positions[-1] + 1000.0  # Position after last
+            
+        # Find position between two existing positions
+        for i in range(len(positions) - 1):
+            if positions[i] <= target_position <= positions[i + 1]:
+                return (positions[i] + positions[i + 1]) / 2
+
+
+class SceneGenerationTracker(UUIDModel, SoftDeleteMixin):
+    __tablename__ = "scene_generation_tracker"
+    
+    script_id = Column(UUID(as_uuid=True), ForeignKey("scripts.id"), nullable=False)
+    beat_id = Column(UUID(as_uuid=True), ForeignKey("beats.id"), nullable=True)
+    act = Column(Enum(ActEnum), nullable=True)
+    status = Column(Enum(SceneGenerationStatus), nullable=False, default=SceneGenerationStatus.NOT_STARTED)
+    started_at = Column(DateTime(timezone=True), server_default=func.now())
+    completed_at = Column(DateTime(timezone=True), nullable=True)
+    attempt_count = Column(Integer, default=1)
+
+    # Relationships
+    script = relationship("Script", back_populates="scene_generations")
+    beat = relationship("Beat", back_populates="generation_attempts")

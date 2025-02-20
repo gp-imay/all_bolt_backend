@@ -2,11 +2,12 @@
 import json
 import logging
 from enum import Enum
-from typing import List, Generator
+from typing import List, Generator, Dict, Any
 from pydantic import BaseModel
 from instructor import from_openai, Mode
 from openai import AzureOpenAI
 from config import settings
+import traceback
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +27,18 @@ class Beat(BaseModel):
     page_length: str
     timing: str
     act: ActEnum
+
+class DialogueBlock(BaseModel):
+    character_name: str
+    dialogue: str
+    parenthetical: str | None = None
+    position: int
+
+class GeneratedScene(BaseModel):
+    scene_heading: str
+    scene_description: str
+    dialogue_blocks: List[DialogueBlock] | None = None
+    estimated_duration: float
 
 
 class AzureOpenAIService:
@@ -113,64 +126,142 @@ class AzureOpenAIService:
             max_tokens=settings.AZURE_OPENAI_MAX_TOKENS,
             temperature=settings.AZURE_OPENAI_TEMPERATURE,
         )
-# class AzureOpenAIService:
-#     def __init__(self):
-#         self.endpoint = settings.AZURE_OPENAI_ENDPOINT
-#         self.api_key = settings.AZURE_OPENAI_API_KEY
-#         self.api_version = settings.AZURE_OPENAI_API_VERSION
-#         self.deployment_name = settings.AZURE_OPENAI_DEPLOYMENT_NAME
-        
-#     async def _make_request(self, messages: List[Dict]) -> Dict:
-#         headers = {
-#             "Content-Type": "application/json",
-#             "api-key": self.api_key
-#         }
-        
-#         payload = {
-#             "messages": messages,
-#             "max_completion_tokens": settings.AZURE_OPENAI_MAX_TOKENS,
-#             "temperature": settings.AZURE_OPENAI_TEMPERATURE
-#             # "response_format": { "type": "json_object" }
-#         }
-        
-#         url = f"{self.endpoint}/openai/deployments/{self.deployment_name}/chat/completions?api-version={self.api_version}"
-#         url = "https://openai-test-azure.openai.azure.com/openai/deployments/o1-mini/chat/completions?api-version=2024-08-01-preview"
-        
-#         async with aiohttp.ClientSession() as session:
-#             async with session.post(url, headers=headers, json=payload) as response:
-#                 if response.status != 200:
-#                     error_text = await response.text()
-#                     logger.error(f"Azure OpenAI API error: {error_text}")
-#                     raise Exception(f"Azure OpenAI API error: {response.status}")
-                
-#                 return await response.json()
 
-#     async def generate_beat_sheet(self, title: str, subtitle: str, genre: str, story: str) -> List[Dict]:
-#         system_prompt = """You are an expert screenplay writer specializing in Blake Snyder's Save the Cat! beat sheet structure. 
-#         Generate a detailed beat sheet with exactly 15 beats. For each beat, provide:
-#         1. Beat number (1-15)
-#         2. Beat name
-#         3. Description tailored to the given story
-#         4. Suggested page length
-#         5. Timing (in terms of script percentage)
-#         Format the response as a JSON object with an array of beats."""
+    def generate_scenes_for_beat(
+        self,
+        beat_title: str,
+        beat_description: str,
+        script_genre: str,
+        tone: str | None = None,
+    ) -> List[GeneratedScene]:
+        """
+        Generate scenes for a specific beat using Azure OpenAI.
+        Returns a list of scenes with their dialogue and descriptions.
+        """
+        system_prompt = """You are an expert screenplay writer with deep knowledge of screenplay formatting and scene structure. 
+        You will generate detailed scenes based on the given beat description. Each scene should include:
+        1. Scene Heading (INT/EXT. LOCATION - TIME)
+        2. Scene Description (action/description)
+        3. Dialogue (if applicable)
+        4. Estimated duration in minutes
 
-#         user_prompt = f"""Create a Save the Cat! beat sheet for a screenplay with the following details:
-#         Title: {title}
-#         Subtitle: {subtitle}
-#         Genre: {genre}
-#         Story: {story}"""
+        Follow these rules:
+        - Scene headings must be clear and follow standard format
+        - Scene descriptions should be vivid but concise
+        - Dialogue should feel natural and reveal character
+        - Consider tone and genre in your writing
+        - Focus on visual storytelling
+        - Create proper dramatic build-up
+        - Each scene should serve the beat's purpose
 
-#         messages = [
-#             {"role": "user", "content": system_prompt},
-#             {"role": "user", "content": user_prompt}
-#         ]
+        Format each scene according to the provided scene structure.
+        """
 
-#         try:
-#             response = await self._make_request(messages)
-#             logger.info(response['choices'][0]['message']['content'])
-#             content = json.loads(response['choices'][0]['message']['content'])
-#             return content['beats']
-#         except Exception as e:
-#             logger.error(f"Error generating beat sheet: {str(e)}")
-#             raise
+        user_prompt = f"""Create scenes for the following beat:
+        Title: {beat_title}
+        Description: {beat_description}
+        Genre: {script_genre}
+        Tone: {tone if tone else 'Match genre conventions'}
+
+        Break this beat into logical scenes that build toward the beat's goal.
+        """
+
+        try:
+            response = self.client.chat.completions.create(
+                model=self.deployment_name,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt}
+                ],
+                response_model=List[GeneratedScene],
+                max_tokens=settings.AZURE_OPENAI_MAX_TOKENS,
+                temperature=settings.AZURE_OPENAI_TEMPERATURE,
+            )
+            
+            return response
+
+        except Exception as e:
+            logger.error(f"Scene generation failed: {str(e)}")
+            raise
+
+    def generate_scenes_for_act(
+        self,
+        act_beats: List[Dict[str, Any]],
+        script_genre: str,
+        tone: str | None = None
+    ) -> Dict[str, List[GeneratedScene]]:
+        """Generate scenes for an entire act maintaining narrative flow."""
+
+        try:
+            counter= 1
+            scenes_by_beat = {}
+            for beat in act_beats:
+                scenes = self.generate_scenes_for_beat(
+                    beat_title=beat.title,
+                    beat_description=beat.description,
+                    script_genre=script_genre,
+                    tone=tone
+                )
+                scenes_by_beat[counter] = scenes
+                counter+=1
+            return scenes_by_beat
+
+        except Exception as e:
+            logger.error(f"Act-level scene generation failed: {str(e)}")
+            logger.error(traceback.format_exc())
+            raise
+
+    def regenerate_scene(
+        self,
+        scene_id: str,
+        beat_context: Dict[str, Any],
+        previous_scene: Dict[str, Any] | None,
+        next_scene: Dict[str, Any] | None,
+        feedback: str | None = None
+    ) -> GeneratedScene:
+        """
+        Regenerate a specific scene with context and optional feedback.
+        """
+        system_prompt = """You are an expert screenplay writer tasked with regenerating a scene.
+        Consider the surrounding context and any feedback provided to improve the scene.
+        Maintain consistency with surrounding scenes while addressing the specified issues.
+        """
+
+        context = {
+            "beat": beat_context,
+            "previous_scene": previous_scene,
+            "next_scene": next_scene,
+            "feedback": feedback
+        }
+
+        user_prompt = f"""Regenerate the scene with the following context:
+        Beat: {beat_context['title']}
+        Beat Description: {beat_context['description']}
+
+        Contex: {context}
+
+        Previous Scene: {previous_scene['scene_heading'] if previous_scene else 'None'}
+        Next Scene: {next_scene['scene_heading'] if next_scene else 'None'}
+
+        Feedback: {feedback if feedback else 'Improve the scene while maintaining story consistency'}
+
+        Create a new version of the scene that better serves the story.
+        """
+
+        try:
+            response = self.client.chat.completions.create(
+                model=self.deployment_name,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt}
+                ],
+                response_model=GeneratedScene,
+                max_tokens=settings.AZURE_OPENAI_MAX_TOKENS,
+                temperature=settings.AZURE_OPENAI_TEMPERATURE,
+            )
+            
+            return response
+
+        except Exception as e:
+            logger.error(f"Scene regeneration failed: {str(e)}")
+            raise

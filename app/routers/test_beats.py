@@ -1,7 +1,7 @@
 import json
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
-from typing import List, Dict
+from typing import List, Dict, Optional
 from database import get_db
 from services.openai_service import AzureOpenAIService
 from pydantic import BaseModel
@@ -91,3 +91,125 @@ async def test_beat_generation_stream(
         async def error_generator():
             yield "data: " + json.dumps({"progress": "error", "error": str(error_message)}) + "\n\n"
         return StreamingResponse(error_generator(), media_type="text/event-stream")
+    
+
+class TestBeatSceneInput(BaseModel):
+    beat_title: str
+    beat_description: str
+    script_genre: str
+    tone: Optional[str] = None
+
+@router.post("/test-scene-generation-for-beat")
+async def test_scene_generation_for_beat(
+    scene_input: TestBeatSceneInput,
+    db: Session = Depends(get_db)
+):
+    """
+    Test endpoint to generate scenes for a single beat.
+    This is for testing purposes only.
+    """
+    openai_service = AzureOpenAIService()
+    
+    try:
+        scenes = openai_service.generate_scenes_for_beat(
+            beat_title=scene_input.beat_title,
+            beat_description=scene_input.beat_description,
+            script_genre=scene_input.script_genre,
+            tone=scene_input.tone
+        )
+        
+        return {
+            "success": True,
+            "beat_info": scene_input.model_dump(),
+            "generated_scenes": scenes
+        }
+        
+    except Exception as e:
+        logger.error(f"Scene generation failed: {str(e)}")
+        return {
+            "success": False,
+            "error": str(e),
+            "beat_info": scene_input.model_dump()
+        }
+
+class TestBeatInput(BaseModel):
+    title: str
+    description: str
+
+class TestActSceneInput(BaseModel):
+    act_beats: List[TestBeatInput]  # List of beats with title and description
+    script_genre: str
+    tone: Optional[str] = None
+
+@router.post("/test-scene-generation-for-act")
+async def test_scene_generation_for_act(
+    act_input: TestActSceneInput,
+    db: Session = Depends(get_db)
+):
+    """
+    Test endpoint to generate scenes for an entire act.
+    This is for testing purposes only.
+    """
+    openai_service = AzureOpenAIService()
+    
+    try:
+        scenes_by_beat = openai_service.generate_scenes_for_act(
+            act_beats=act_input.act_beats,
+            script_genre=act_input.script_genre,
+            tone=act_input.tone
+        )
+        
+        return {
+            "success": True,
+            "act_info": act_input.model_dump(),
+            "scenes_by_beat": scenes_by_beat
+        }
+        
+    except Exception as e:
+        logger.error(f"Act scene generation failed: {str(e)}")
+        return {
+            "success": False,
+            "error": str(e),
+            "act_info": act_input.model_dump()
+        }
+
+class SceneRegenerationInput(BaseModel):
+    scene_id: str
+    beat_context: Dict[str, str]
+    previous_scene: Optional[Dict[str, str]] = None
+    next_scene: Optional[Dict[str, str]] = None
+    feedback: Optional[str] = None
+
+@router.post("/test-scene-regeneration")
+async def test_scene_regeneration(
+    regen_input: SceneRegenerationInput,
+    db: Session = Depends(get_db)
+):
+    """
+    Test endpoint to regenerate a specific scene with context.
+    This is for testing purposes only.
+    """
+    openai_service = AzureOpenAIService()
+    
+    try:
+        regenerated_scene = openai_service.regenerate_scene(
+            scene_id=regen_input.scene_id,
+            beat_context=regen_input.beat_context,
+            previous_scene=regen_input.previous_scene,
+            next_scene=regen_input.next_scene,
+            feedback=regen_input.feedback
+        )
+        
+        return {
+            "success": True,
+            "input_context": regen_input.model_dump(),
+            "regenerated_scene": regenerated_scene
+        }
+        
+    except Exception as e:
+        logger.error(f"Scene regeneration failed: {str(e)}")
+        return {
+            "success": False,
+            "error": str(e),
+            "input_context": regen_input.model_dump()
+        }
