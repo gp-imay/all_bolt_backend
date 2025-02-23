@@ -98,26 +98,26 @@ class BeatSheetService:
     @staticmethod
     def update_beat(
         db: Session,
-        script_id: UUID,
+        beat_id: UUID,
         user_id: UUID,
-        position: int,
         beat_update: BeatUpdate
+
     ) -> Beat:
         """
         Update a specific beat
         """
-        beat = db.query(Beat).filter(
+        beat = db.query(Beat).join(Script).filter(
             and_(
-                Beat.script_id == script_id,
-                Beat.user_id == user_id,
-                Beat.position == position
+                Beat.id == beat_id,
+                Script.user_id == user_id
             )
         ).first()
+
 
         if not beat:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Beat at position {position} not found"
+                detail="Beat not found"
             )
 
         update_data = beat_update.model_dump(exclude_unset=True)

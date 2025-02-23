@@ -4,6 +4,7 @@ from datetime import datetime
 from enum import Enum
 
 
+
 from schemas.script import ScriptOut
 
 class BeatSheetType(str, Enum):
@@ -14,6 +15,12 @@ class BeatSheetType(str, Enum):
     TV_BEAT_SHEET = "TV Beat Sheet (TV Structure)"
     MINI_MOVIE = "The Mini-Movie Method (Chris Soth)"
     INDIE_FILM = "Indie Film Beat Sheet"
+
+class ActEnum(str, Enum):
+    act_1 = "act_1"
+    act_2a = "act_2a"
+    act_2b = "act_2b"
+    act_3 = "act_3"
 
 class BeatBase(BaseModel):
     position: int = Field(..., ge=1, le=15)
@@ -27,6 +34,8 @@ class BeatCreate(BeatBase):
 class BeatUpdate(BaseModel):
     beat_title: Optional[str] = Field(None, min_length=1, max_length=255)
     beat_description: Optional[str] = Field(None, min_length=1)
+    beat_act: Optional[ActEnum] = None
+
 
 class Beat(BeatBase):
     id: UUID4

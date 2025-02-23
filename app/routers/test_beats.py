@@ -1,13 +1,15 @@
 import json
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from typing import List, Dict, Optional
 from database import get_db
 from services.openai_service import AzureOpenAIService
+from services.scene_description_service import SceneDescriptionService
 from pydantic import BaseModel
 from fastapi.responses import StreamingResponse
 import traceback
 import logging
+from pydantic import BaseModel, UUID4
 
 logger = logging.getLogger(__name__)
 
@@ -213,3 +215,39 @@ async def test_scene_regeneration(
             "error": str(e),
             "input_context": regen_input.model_dump()
         }
+
+
+class TestSceneGenerationInput(BaseModel):
+    beat_id: UUID4
+    user_id: UUID4
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "beat_id": "123e4567-e89b-12d3-a456-426614174000",
+                "user_id": "123e4567-e89b-12d3-a456-426614174001"
+            }
+        }
+
+@router.post("/test-scene-desc-generation")
+async def test_scene_generation(
+    input_data: TestSceneGenerationInput,
+    db: Session = Depends(get_db)
+):
+    """
+    Test endpoint to generate scenes using Azure OpenAI.
+    This endpoint doesn't save the generated scenes to the database.
+    """
+    scene_service = SceneDescriptionService()
+    try:
+        result = await scene_service.generate_scene_description_for_beat(
+            db=db,
+            beat_id=input_data.beat_id,
+            user_id=input_data.user_id
+        )
+        return result
+    except HTTPException as e:
+        return {
+            "success": False,
+            "error": str(e.detail),
+            "input": input_data.model_dump()}

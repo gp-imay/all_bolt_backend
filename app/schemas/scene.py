@@ -100,3 +100,47 @@ class SceneReorderRequest(BaseModel):
 class BatchSceneCreateRequest(BaseModel):
     beat_id: UUID4
     scenes: List[SceneCreate]
+
+class BeatSceneGenerationRequest(BaseModel):
+    beat_id: UUID4
+    script_id: UUID4
+
+class ActSceneGenerationRequest(BaseModel):
+    act: ActEnum
+    script_id: UUID4
+
+class DialogueBlock(BaseModel):
+    character_name: str
+    dialogue: str
+    parenthetical: str | None = None
+    position: int
+
+class GeneratedScene(BaseModel):
+    scene_heading: str
+    scene_description: str
+    dialogue_blocks: List[DialogueBlock] | None = None
+    estimated_duration: float
+
+class SceneResponse(BaseModel):
+    id: UUID4
+    beat_id: UUID4
+    position: float
+    scene_heading: str
+    scene_description: str
+    dialogue_blocks: Optional[List[DialogueBlock]] = None
+    estimated_duration: Optional[float] = None
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+    is_deleted: bool = False
+    deleted_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+class SceneGenerationResult(BaseModel):
+    beat_id: UUID4
+    scenes: List[SceneResponse]
+    source: str
+
+    class Config:
+        from_attributes = True

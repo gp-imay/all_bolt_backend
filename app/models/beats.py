@@ -57,7 +57,7 @@ class Beat(UUIDModel, SoftDeleteMixin):
     master_beat_sheet_id = Column(UUID(as_uuid=True), ForeignKey("master_beat_sheets.id"), nullable=False)
     # user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)  # Added user_id
     position = Column(Integer, nullable=False)
-    beat_title = Column(String(255), nullable=False)
+    beat_title = Column(String(1000), nullable=False)
     beat_description = Column(Text, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
@@ -69,6 +69,8 @@ class Beat(UUIDModel, SoftDeleteMixin):
     master_beat_sheet = relationship("MasterBeatSheet", back_populates="beats")
     scenes = relationship("Scene", back_populates="beat", cascade="all, delete-orphan")
     generation_attempts = relationship("SceneGenerationTracker", back_populates="beat")
+    # scene_descriptions = relationship("SceneDescription", back_populates="beats", cascade="all, delete-orphan")
+
 
     # user = relationship("User", back_populates="beats")  # Added relationship to user
 
@@ -97,28 +99,28 @@ class Scene(UUIDModel, SoftDeleteMixin):
         UniqueConstraint('beat_id', 'position', 'is_deleted', name='unique_position_per_beat'),
     )
 
-    @classmethod
-    def calculate_position(cls, db, beat_id, target_position: float) -> float:
-        """Calculate a new position value between two existing positions"""
-        positions = db.query(cls.position)\
-            .filter(cls.beat_id == beat_id, cls.is_deleted.is_(False))\
-            .order_by(cls.position)\
-            .all()
-        positions = [p[0] for p in positions]
+    # @classmethod
+    # def calculate_position(cls, db, beat_id, target_position: float) -> float:
+    #     """Calculate a new position value between two existing positions"""
+    #     positions = db.query(cls.position)\
+    #         .filter(cls.beat_id == beat_id, cls.is_deleted.is_(False))\
+    #         .order_by(cls.position)\
+    #         .all()
+    #     positions = [p[0] for p in positions]
         
-        if not positions:
-            return 1000.0  # First item
+    #     if not positions:
+    #         return 1000.0  # First item
             
-        if target_position <= positions[0]:
-            return positions[0] - 1000.0  # Position before first
+    #     if target_position <= positions[0]:
+    #         return positions[0] - 1000.0  # Position before first
             
-        if target_position >= positions[-1]:
-            return positions[-1] + 1000.0  # Position after last
+    #     if target_position >= positions[-1]:
+    #         return positions[-1] + 1000.0  # Position after last
             
-        # Find position between two existing positions
-        for i in range(len(positions) - 1):
-            if positions[i] <= target_position <= positions[i + 1]:
-                return (positions[i] + positions[i + 1]) / 2
+    #     # Find position between two existing positions
+    #     for i in range(len(positions) - 1):
+    #         if positions[i] <= target_position <= positions[i + 1]:
+    #             return (positions[i] + positions[i + 1]) / 2
 
 
 class SceneGenerationTracker(UUIDModel, SoftDeleteMixin):

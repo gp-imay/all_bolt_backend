@@ -1,13 +1,15 @@
 from sqlalchemy.orm import Session
 from sqlalchemy import and_, or_, desc, func
 from fastapi import HTTPException, status
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Tuple
 from uuid import UUID
 import logging
+import traceback
 
 from models.beats import Scene, Beat, SceneGenerationTracker, SceneGenerationStatus, ActEnum
 from models.script import Script
 from schemas.scene import SceneCreate, SceneUpdate, SceneGenerationRequest
+from schemas.scene import SceneResponse, SceneGenerationResult
 from services.openai_service import AzureOpenAIService
 
 logger = logging.getLogger(__name__)
@@ -148,6 +150,35 @@ class SceneService:
                 detail="Could not delete scene"
             )
 
+    @staticmethod
+    def get_existing_scenes(db: Session, beat_id: UUID) -> List[Scene]:
+        """Get existing non-deleted scenes for a beat"""
+        return db.query(Scene).filter(
+            Scene.beat_id == beat_id,
+            Scene.is_deleted.is_(False)
+        ).order_by(Scene.position).all()
+    
+    @staticmethod
+    def validate_beat_and_script(db: Session, beat_id: UUID, script_id: UUID) -> Tuple[Beat, Script]:
+        """Validate and return beat and script"""
+        beat = db.query(Beat).filter(Beat.id == beat_id).first()
+        if not beat:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Beat not found"
+            )
+        
+        script = db.query(Script).filter(Script.id == script_id).first()
+        if not script:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Script not found"
+            )
+            
+        return beat, script
+
+
+
 class SceneGenerationService:
     def __init__(self):
         self.openai_service = AzureOpenAIService()
@@ -156,7 +187,7 @@ class SceneGenerationService:
         self,
         db: Session,
         request: SceneGenerationRequest
-    ) -> Dict[str, Any]:
+    ) -> SceneGenerationResult:
         """Generate scenes for either a beat or an act"""
         # Create generation tracker
         tracker = SceneGenerationTracker(
@@ -170,10 +201,12 @@ class SceneGenerationService:
 
         try:
             if request.beat_id:
-                return await self._generate_scenes_for_beat(db, request.beat_id, tracker)
+                resp = await self._generate_scenes_for_beat(db, request.beat_id, request.script_id, tracker)
+                return resp
             else:
                 return await self._generate_scenes_for_act(db, request.script_id, request.act, tracker)
         except Exception as e:
+            logger.error(traceback.format_exc())
             tracker.status = SceneGenerationStatus.FAILED
             db.commit()
             logger.error(f"Scene generation failed: {str(e)}")
@@ -186,8 +219,9 @@ class SceneGenerationService:
         self,
         db: Session,
         beat_id: UUID,
+        script_id: UUID,
         tracker: SceneGenerationTracker
-    ) -> Dict[str, Any]:
+    ) -> SceneGenerationResult:
         """Generate scenes for a single beat"""
         beat = db.query(Beat).filter(Beat.id == beat_id).first()
         if not beat:
@@ -195,20 +229,56 @@ class SceneGenerationService:
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Beat not found"
             )
+        script = db.query(Script).filter(Script.id == script_id).first()
+        if not script:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Script not found"
+            )
+
+        # Validate beat and script
+        beat_, script_ = SceneService.validate_beat_and_script(db, beat_id, script_id)
+        
+        # Check for existing scenes
+        existing_scenes = SceneService.get_existing_scenes(db, beat_id)
+        if existing_scenes:
+            logger.info(f"Found existing scenes for beat {beat_id}")
+            return {
+                "beat_id": beat.id,
+                "scenes": existing_scenes,
+                "source": "existing"
+            }
 
         # Generate scenes using OpenAI
-        scenes_data = await self.openai_service.generate_scenes_for_beat(
-            beat_title=beat.beat_title,
-            beat_description=beat.beat_description
-        )
-
+        scenes_data = self.openai_service.generate_scenes_for_beat(
+                beat_title=beat.beat_title,
+                beat_description=beat.beat_description,
+                script_genre=script.genre,
+                tone=None
+            )
+     
+        # logger.info(type(scenes_data[0].dialogue_blocks))
         # Create scenes
         created_scenes = []
+
         for i, scene_data in enumerate(scenes_data, 1):
+            dialogue_blocks_dict = [
+                {
+                    "character_name": block.character_name,
+                    "dialogue": block.dialogue,
+                    "parenthetical": block.parenthetical,
+                    "position": block.position
+                }
+                for block in scene_data.dialogue_blocks
+            ] if scene_data.dialogue_blocks else []
+
             scene = SceneCreate(
                 beat_id=beat_id,
                 position=i * 1000.0,  # Space them out
-                **scene_data
+                scene_heading=scene_data.scene_heading,
+                scene_description=scene_data.scene_description,
+                dialogue_blocks=dialogue_blocks_dict,
+                scene_hestimated_durationeading=scene_data.estimated_duration,
             )
             created_scenes.append(SceneService.create_scene(db, scene))
 
@@ -217,11 +287,12 @@ class SceneGenerationService:
         tracker.completed_at = func.now()
         db.commit()
 
-        return {
-            "beat_id": beat_id,
-            "scenes": created_scenes,
-            "status": "completed"
-        }
+        return SceneGenerationResult(
+                beat_id=beat.id,
+                scenes=[SceneResponse.model_validate(scene) for scene in created_scenes],
+                source="generated"
+            )
+
 
     async def _generate_scenes_for_act(
         self,
@@ -231,6 +302,13 @@ class SceneGenerationService:
         tracker: SceneGenerationTracker
     ) -> Dict[str, Any]:
         """Generate scenes for all beats in an act"""
+        script = db.query(Script).filter(Script.id == script_id).first()
+        if not script:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Script not found"
+            )
+
         beats = db.query(Beat).filter(
             and_(
                 Beat.script_id == script_id,
@@ -249,6 +327,7 @@ class SceneGenerationService:
             beat_result = await self._generate_scenes_for_beat(
                 db,
                 beat.id,
+                script.id,
                 tracker
             )
             results.append(beat_result)

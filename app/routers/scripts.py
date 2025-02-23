@@ -146,7 +146,7 @@ async def upload_script_file(
     )
 
 
-@router.post("/with-ai", response_model=ScriptWithBeatsResponse, tags=["AI User Flow"])
+@router.post("/with-ai", response_model=ScriptWithBeatsResponse)
 async def create_script_with_ai(
     script: ScriptCreate,
     current_user: User = Depends(get_current_user),

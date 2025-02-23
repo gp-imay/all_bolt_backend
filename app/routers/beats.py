@@ -20,7 +20,7 @@ from services.azure_service import AzureStorageService
 from services.beat_service import BeatSheetService
 from auth.dependencies import get_current_user
 from schemas.user import User
-from schemas.beat import ScriptWithBeatsResponse, BeatResponse
+from schemas.beat import ScriptWithBeatsResponse, BeatResponse, BeatUpdate
 from schemas.script import ScriptCreationMethod
 from models.beats import MasterBeatSheet, Beat
 
@@ -60,3 +60,30 @@ async def get_script_beatsheet(
             beat_id=beat.id
         ) for beat in beats
     ]
+
+
+@router.patch("/{beat_id}", response_model=BeatResponse)
+async def update_beat(
+    beat_id: UUID,
+    beat_update: BeatUpdate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Update a specific beat's details.
+    """
+    updated_beat = BeatSheetService.update_beat(
+        db=db,
+        beat_id=beat_id,
+        user_id=current_user.id,
+        beat_update=beat_update
+    )
+    
+    return BeatResponse(
+        position=updated_beat.position,
+        beat_title=updated_beat.beat_title,
+        beat_description=updated_beat.beat_description,
+        script_id=updated_beat.script_id,
+        beat_act=updated_beat.beat_act,
+        beat_id=updated_beat.id
+    )

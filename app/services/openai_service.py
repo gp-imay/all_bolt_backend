@@ -2,7 +2,7 @@
 import json
 import logging
 from enum import Enum
-from typing import List, Generator, Dict, Any
+from typing import List, Generator, Dict, Any, Optional
 from pydantic import BaseModel
 from instructor import from_openai, Mode
 from openai import AzureOpenAI
@@ -34,11 +34,16 @@ class DialogueBlock(BaseModel):
     parenthetical: str | None = None
     position: int
 
+# class GeneratedScriptScene(BaseModel):
+#     scene_heading: str
+#     scene_description: str
+#     dialogue_blocks: List[DialogueBlock] | None = None
+#     estimated_duration: float
+
 class GeneratedScene(BaseModel):
     scene_heading: str
     scene_description: str
-    dialogue_blocks: List[DialogueBlock] | None = None
-    estimated_duration: float
+    position: int
 
 
 class AzureOpenAIService:
@@ -264,4 +269,88 @@ class AzureOpenAIService:
 
         except Exception as e:
             logger.error(f"Scene regeneration failed: {str(e)}")
+            raise
+
+
+    def generate_scene_description_for_beat(
+        self,
+        story_synopsis: str,
+        genre: str,
+        beat_position: int,
+        template_beat_title: str,
+        template_beat_definition: str,
+        story_specific_beat_title: str,
+        story_specific_beat_description: str,
+        previous_scenes: Optional[List[str]] = None,
+        num_scenes: int = 5
+    ) -> List[GeneratedScene]:
+        """
+        Generate scenes for a specific beat using Azure OpenAI.
+        
+        Args:
+            story_synopsis: Overall story summary
+            genre: Script genre
+            beat_position: Position of beat in story
+            template_beat_title: Original beat title from template
+            template_beat_definition: Original beat definition from template
+            story_specific_beat_title: Customized beat title
+            story_specific_beat_description: Customized beat description
+            previous_scenes: List of previous scene titles for continuity
+            num_scenes: Number of scenes to generate
+        """
+        system_prompt = f"""You are an expert screenplay writer specialized in {genre} films.
+        Your task is to generate {num_scenes} unique and compelling scenes that fulfill the requirements of a specific beat in the screenplay.
+        
+        For each scene, provide:
+        1. A scene heading is a short version of whats happening in the script flow within four or five words.
+        2. A scene description is a very short one line on what's going to unfold in that scene, No need to descriptive, only outline is needed.
+        
+        Consider:
+        - Genre conventions and audience expectations
+        - The beat's purpose in the story structure
+        - Visual storytelling elements
+        - Character development opportunities
+        - Proper dramatic pacing
+        - Natural story progression
+        """
+
+        user_prompt = f"""Create {num_scenes} scenes for this beat in the screenplay:
+
+        Story Context:
+        - Synopsis: {story_synopsis}
+        - Genre: {genre}
+        - Beat Position: {beat_position}
+
+        Beat Information:
+        - Template Title: {template_beat_title}
+        - Template Definition: {template_beat_definition}
+        - Story-Specific Title: {story_specific_beat_title}
+        - Story-Specific Description: {story_specific_beat_description}
+
+        {f'Previous Scenes for Context: {", ".join(previous_scenes)}' if previous_scenes else ''}
+
+        Generate {num_scenes} distinct scenes that:
+        1. Fulfill this beat's purpose in the story
+        2. Maintain consistent tone and pacing
+        3. Follow proper screenplay formatting
+        4. Advance the plot while developing characters
+        5. Consider the story's genre conventions
+        """
+
+        try:
+            response = self.client.chat.completions.create(
+                model=self.deployment_name,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt}
+                ],
+                response_model=List[GeneratedScene],
+                max_tokens=settings.AZURE_OPENAI_MAX_TOKENS,
+                temperature=settings.AZURE_OPENAI_TEMPERATURE,
+            )
+            
+            return response
+
+        except Exception as e:
+            logger.error(f"Scene generation failed: {str(e)}")
             raise
