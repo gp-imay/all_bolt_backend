@@ -37,3 +37,68 @@ class SceneGenerationResponse(BaseModel):
 class GeneratedScene(BaseModel):
     scene_heading: str
     scene_description: str
+
+class BeatSceneDescriptionGenerationRequest(BaseModel):
+    beat_id: UUID4
+
+class SceneDescriptionResponse(BaseModel):
+    id: UUID4
+    beat_id: UUID4
+    position: int
+    scene_heading: str
+    scene_description: str
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+    is_deleted: bool = False
+    deleted_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+
+class SceneDescriptionCreate(BaseModel):
+    beat_id: UUID4
+    position: int
+    scene_heading: str = Field(..., min_length=1, max_length=1000)
+    scene_description: str = Field(..., min_length=1)
+
+
+class SceneDescriptionResult(BaseModel):
+    beat_id: UUID4
+    scenes: List[SceneDescriptionResponse]
+    source: str = "generated"
+
+    class Config:
+        from_attributes = True
+
+
+class GeneratedSceneResponse(BaseModel):
+    id: UUID4
+    beat_id: UUID4
+    position: int
+    scene_heading: str
+    scene_description: str
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+
+class TemplateBeat(BaseModel):
+    name: str
+    position: int
+    description: str
+    number_of_scenes: int
+
+class Context(BaseModel):
+    script_title: str
+    genre: str
+    beat_position: int
+    template_beat: TemplateBeat
+    source: str
+    num_scenes: Optional[int] = None
+
+class SceneDescriptionResponsePost(BaseModel):
+    success: bool
+    context: Context
+    generated_scenes: List[GeneratedSceneResponse]
+
+    class Config:
+        from_attributes = True

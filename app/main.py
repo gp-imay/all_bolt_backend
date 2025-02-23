@@ -13,7 +13,7 @@ from database import engine, Base
 from models import users, script  # This ensures models are imported for migrations
 
 # Import routers
-from routers import users, scripts, test_beats, beats, scenes
+from routers import users, scripts, test_beats, beats, scenes, scene_descriptions
 
 # Configure logging
 logging.basicConfig(
@@ -114,6 +114,13 @@ app.include_router(
     prefix=f"{settings.API_V1_PREFIX}/scenes",
     tags=["scenes"]
 )
+
+app.include_router(
+    scene_descriptions.router,
+    prefix=f"{settings.API_V1_PREFIX}/scene-descriptions",
+    tags=["scene-descriptions"]
+)
+
 if settings.DEBUG:  # Only include test endpoints in debug mode
     app.include_router(
         test_beats.router,

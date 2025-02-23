@@ -14,6 +14,7 @@ from models.script import Script
 from models.beats import Beat, MasterBeatSheet
 
 from schemas.scene import SceneCreate, SceneUpdate
+from schemas.scene_description import SceneDescriptionResponse, SceneDescriptionResponsePost
 from services.openai_service import AzureOpenAIService
 
 logger = logging.getLogger(__name__)
@@ -80,7 +81,6 @@ class SceneDescriptionService:
 
         # Parse template JSON
         template_data = master_beat_sheet.template
-        logger.info(template_data)
         if isinstance(template_data, str):
             template_data = json.loads(template_data)
         beat_template = next(
@@ -117,7 +117,7 @@ class SceneDescriptionService:
         db: Session,
         beat_id: UUID,
         user_id: Optional[UUID]
-    ) -> List[SceneDescription]:
+    ) -> SceneDescriptionResponsePost:
         """
         Generate scenes for a beat using AI and save them to database
         """
@@ -128,10 +128,47 @@ class SceneDescriptionService:
                 db, beat_id, user_id
             )
             
-            logger.info("Passed here")
-            logger.info("*"*100)
             # Get number of scenes from template
             num_scenes = beat_template.get('number_of_scenes', 4)
+
+            # Check for existing scenes first
+            existing_scenes = (
+                db.query(SceneDescription)
+                .filter(
+                    and_(
+                        SceneDescription.beat_id == beat_id,
+                        SceneDescription.is_deleted.is_(False)
+                    )
+                )
+                .order_by(SceneDescription.position)
+                .all()
+            )
+            
+            if existing_scenes:
+                logger.info(f"Found {len(existing_scenes)} existing scenes for beat {beat_id}")
+                return {
+                    "success": True,
+                    "context": {
+                        "script_title": script.title,
+                        "genre": script.genre,
+                        "beat_position": beat.position,
+                        "template_beat": beat_template,
+                        "source": "existing"  # Indicate these are existing scenes
+                    },
+                    "generated_scenes": [
+                        {
+                            "id": scene.id,
+                            "beat_id": scene.beat_id,
+                            "position": scene.position,
+                            "scene_heading": scene.scene_heading,
+                            "scene_description": scene.scene_description,
+                            "created_at": scene.created_at,
+                            "updated_at": scene.updated_at
+                        }
+                        for scene in existing_scenes
+                    ]
+                }
+
 
             # Generate scenes using OpenAI
             generated_scenes = self.openai_service.generate_scene_description_for_beat(
@@ -145,7 +182,31 @@ class SceneDescriptionService:
                 previous_scenes=previous_scenes,
                 num_scenes=num_scenes
             )
+            stored_scenes = []
+            for position, scene in enumerate(generated_scenes, 1):
+                # Create SceneDescription object
+                scene_description = SceneDescription(
+                    beat_id=beat_id,
+                    position=position,
+                    scene_heading=scene.scene_heading,
+                    scene_description=scene.scene_description,
+                )
+                
+                db.add(scene_description)
+                stored_scenes.append(scene_description)
 
+            try:
+                db.commit()
+                # Refresh all scenes to get their generated IDs
+                for scene in stored_scenes:
+                    db.refresh(scene)
+            except Exception as db_error:
+                db.rollback()
+                logger.error(f"Database error while storing scenes: {str(db_error)}")
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail="Failed to store generated scenes in database"
+                )
             return {
                 "success": True,
                 "context": {
@@ -155,8 +216,20 @@ class SceneDescriptionService:
                     "template_beat": beat_template,
                     "num_scenes": num_scenes
                 },
-                "generated_scenes": [scene.model_dump() for scene in generated_scenes]
+                "generated_scenes": [
+                    {
+                        "id": scene.id,
+                        "beat_id": scene.beat_id,
+                        "position": scene.position,
+                        "scene_heading": scene.scene_heading,
+                        "scene_description": scene.scene_description,
+                        "created_at": scene.created_at,
+                        "updated_at": scene.updated_at
+                    }
+                    for scene in stored_scenes
+                ]
             }
+
 
         except HTTPException:
             raise
@@ -167,6 +240,71 @@ class SceneDescriptionService:
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail=f"Failed to generate scenes: {str(e)}"
             )
+        
+    @staticmethod
+    def get_scene_descriptions_for_beat(
+        db: Session,
+        beat_id: UUID,
+        user_id: UUID
+    ) -> List[SceneDescription]:
+        """
+        Retrieve all scene descriptions for a specific beat.
+        
+        Args:
+            db: Database session
+            beat_id: UUID of the beat
+            user_id: UUID of the requesting user
+            
+        Returns:
+            List of SceneDescription objects
+            
+        Raises:
+            HTTPException: If beat not found or user unauthorized
+        """
+        try:
+            # Verify beat exists and user has access
+            beat_query = (
+                db.query(Beat)
+                .join(Script)
+                .filter(
+                    and_(
+                        Beat.id == beat_id,
+                        Script.user_id == user_id
+                    )
+                )
+            )
+            
+            beat = beat_query.first()
+            if not beat:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Beat not found or unauthorized access"
+                )
+            
+            # Get all non-deleted scene descriptions for this beat
+            scene_descriptions = (
+                db.query(SceneDescription)
+                .filter(
+                    and_(
+                        SceneDescription.beat_id == beat_id,
+                        SceneDescription.is_deleted.is_(False)
+                    )
+                )
+                .order_by(SceneDescription.position)
+                .all()
+            )
+            
+            return scene_descriptions
+            
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"Error retrieving scene descriptions: {str(e)}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Failed to retrieve scene descriptions: {str(e)}"
+            )
+
 
 
     # @staticmethod
