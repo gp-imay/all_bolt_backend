@@ -1,6 +1,7 @@
 # services/scene_description_service.py
 from sqlalchemy.orm import Session
-from sqlalchemy import and_
+from sqlalchemy import and_, func
+# from sqlalchemy.sql import func
 from fastapi import HTTPException, status
 from typing import List, Optional, Tuple, Dict, Any
 from uuid import UUID
@@ -22,6 +23,70 @@ logger = logging.getLogger(__name__)
 class SceneDescriptionService:
     def __init__(self):
         self.openai_service = AzureOpenAIService()
+
+    @staticmethod
+    def format_scene_for_ui( scene_heading: str, scene_description: str) -> str:
+        """Format scene details for UI display"""
+        return f"{scene_heading} : {scene_description}"
+
+    def prepare_scene_response(self, scene: SceneDescription) -> SceneDescriptionResponse:
+        """Prepare scene response with UI-formatted details"""
+        # logger.info(scene.scene_heading)
+        # logger.info(scene.scene_description)
+        return SceneDescriptionResponse(
+            id=scene.id,
+            beat_id=scene.beat_id,
+            position=scene.position,
+            scene_heading=scene.scene_heading,
+            scene_description=scene.scene_description,
+            scene_detail_for_ui=self.format_scene_for_ui(
+                scene.scene_heading, 
+                scene.scene_description
+            ),
+            created_at=scene.created_at,
+            updated_at=scene.updated_at,
+            is_deleted=scene.is_deleted,
+            deleted_at=scene.deleted_at
+        )
+
+    @staticmethod
+    def parse_scene_detail(scene_detail: str) -> tuple[str, str]:
+        """
+        Parse scene detail string in format 'Scene Title: {heading} : {description}'
+        Returns tuple of (heading, description)
+        """
+        try:
+            # Remove 'Scene Title: ' prefix
+            # content = scene_detail.replace("Scene Title: ", "", 1)
+            # Split remaining string on " : "
+            logger.info("*"*100)
+            logger.info(scene_detail)
+            logger.info("*"*100)
+            parts = scene_detail.split(":")
+            if len(parts) != 2:
+                raise ValueError("Invalid scene detail format")
+            return parts[0].strip(), parts[1].strip()
+        except Exception as e:
+            raise ValueError(f"Failed to parse scene detail: {str(e)}")
+
+    @staticmethod
+    def detect_changes(
+        original_heading: str,
+        original_description: str,
+        new_heading: str,
+        new_description: str
+    ) -> dict:
+        """
+        Detect which fields have changed
+        Returns dict with updated fields only
+        """
+        changes = {}
+        if original_heading != new_heading:
+            changes['scene_heading'] = new_heading
+        if original_description != new_description:
+            changes['scene_description'] = new_description
+        return changes
+
 
     @staticmethod
     def get_beat_generation_context(
@@ -156,15 +221,7 @@ class SceneDescriptionService:
                         "source": "existing"  # Indicate these are existing scenes
                     },
                     "generated_scenes": [
-                        {
-                            "id": scene.id,
-                            "beat_id": scene.beat_id,
-                            "position": scene.position,
-                            "scene_heading": scene.scene_heading,
-                            "scene_description": scene.scene_description,
-                            "created_at": scene.created_at,
-                            "updated_at": scene.updated_at
-                        }
+                        self.prepare_scene_response(scene)
                         for scene in existing_scenes
                     ]
                 }
@@ -217,15 +274,7 @@ class SceneDescriptionService:
                     "num_scenes": num_scenes
                 },
                 "generated_scenes": [
-                    {
-                        "id": scene.id,
-                        "beat_id": scene.beat_id,
-                        "position": scene.position,
-                        "scene_heading": scene.scene_heading,
-                        "scene_description": scene.scene_description,
-                        "created_at": scene.created_at,
-                        "updated_at": scene.updated_at
-                    }
+                    self.prepare_scene_response(scene)
                     for scene in stored_scenes
                 ]
             }
@@ -293,18 +342,101 @@ class SceneDescriptionService:
                 .order_by(SceneDescription.position)
                 .all()
             )
-            
-            return scene_descriptions
+
+            service = SceneDescriptionService()
+            logger.info([vars(x) for x in scene_descriptions[:1]])
+            return [service.prepare_scene_response(scene) for scene in scene_descriptions]
+
             
         except HTTPException:
             raise
         except Exception as e:
             logger.error(f"Error retrieving scene descriptions: {str(e)}")
+            logger.error(traceback.format_exc())
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail=f"Failed to retrieve scene descriptions: {str(e)}"
             )
 
+    async def update_scene_description(
+        self,
+        db: Session,
+        scene_id: UUID,
+        user_id: UUID,
+        scene_detail: str
+    ) -> SceneDescriptionResponse:
+        """
+        Update scene description based on edited UI string
+        """
+        try:
+            # Get existing scene and verify ownership
+            scene = (
+                db.query(SceneDescription)
+                .join(Beat)
+                .join(Script)
+                .filter(
+                    and_(
+                        SceneDescription.id == scene_id,
+                        Script.user_id == user_id,
+                        SceneDescription.is_deleted.is_(False)
+                    )
+                )
+                .first()
+            )
+
+            if not scene:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Scene not found or unauthorized access"
+                )
+
+            # Parse new scene detail
+            try:
+                new_heading, new_description = self.parse_scene_detail(scene_detail)
+            except ValueError as e:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=str(e)
+                )
+
+            # Detect changes
+            changes = self.detect_changes(
+                scene.scene_heading,
+                scene.scene_description,
+                new_heading,
+                new_description
+            )
+
+            if not changes:
+                # No changes detected
+                return self.prepare_scene_response(scene)
+
+            # Apply updates
+            for field, value in changes.items():
+                setattr(scene, field, value)
+
+            try:
+                scene.updated_at = func.now()
+                db.commit()
+                db.refresh(scene)
+            except Exception as e:
+                db.rollback()
+                logger.error(f"Failed to update scene: {str(e)}")
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail="Failed to update scene"
+                )
+
+            return self.prepare_scene_response(scene)
+
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"Error updating scene description: {str(e)}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Failed to update scene description: {str(e)}"
+            )
 
 
     # @staticmethod

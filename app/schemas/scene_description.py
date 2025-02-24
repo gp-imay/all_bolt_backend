@@ -47,6 +47,7 @@ class SceneDescriptionResponse(BaseModel):
     position: int
     scene_heading: str
     scene_description: str
+    scene_detail_for_ui: str
     created_at: datetime
     updated_at: Optional[datetime] = None
     is_deleted: bool = False
@@ -102,3 +103,11 @@ class SceneDescriptionResponsePost(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class SceneDescriptionPatchRequest(BaseModel):
+    scene_detail_for_ui: str = Field(..., description="Updated scene detail in format 'Scene Title: {heading} : {description}'")
+
+class SceneDescriptionPatch(BaseModel):
+    scene_heading: Optional[str] = None
+    scene_description: Optional[str] = None
