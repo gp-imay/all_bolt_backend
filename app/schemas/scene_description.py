@@ -1,7 +1,8 @@
 # schemas/scene.py
 from pydantic import BaseModel, UUID4, Field
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
 from datetime import datetime
+from schemas.scene import ActEnum
 
 class SceneBase(BaseModel):
     scene_heading: str = Field(..., min_length=1, max_length=255)
@@ -111,3 +112,26 @@ class SceneDescriptionPatchRequest(BaseModel):
 class SceneDescriptionPatch(BaseModel):
     scene_heading: Optional[str] = None
     scene_description: Optional[str] = None
+
+class ActSceneDescriptionGenerationRequest(BaseModel):
+    script_id: UUID4
+    act: ActEnum
+
+
+
+class ContextAct(BaseModel):
+    script_title: str
+    genre: str
+    beat_position: int
+    template_beat: TemplateBeat
+    source: str
+    num_scenes: Optional[int] = None
+
+class ActSceneDescriptionResult(BaseModel):
+    success: bool
+    context: ContextAct
+    context: Dict[str, Any]
+    generated_scenes: List[SceneDescriptionResponse]
+
+    class Config:
+        from_attributes = True

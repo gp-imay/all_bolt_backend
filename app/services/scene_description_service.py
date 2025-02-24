@@ -1,6 +1,7 @@
 # services/scene_description_service.py
 from sqlalchemy.orm import Session
-from sqlalchemy import and_, func
+from sqlalchemy.dialects import postgresql
+from sqlalchemy import and_, func, or_
 # from sqlalchemy.sql import func
 from fastapi import HTTPException, status
 from typing import List, Optional, Tuple, Dict, Any
@@ -14,11 +15,11 @@ from models.beats import Beat
 from models.script import Script
 from models.beats import Beat, MasterBeatSheet
 
-from schemas.scene import SceneCreate, SceneUpdate
-from schemas.scene_description import SceneDescriptionResponse, SceneDescriptionResponsePost
+from schemas.scene_description import SceneDescriptionResponse, SceneDescriptionResponsePost, ActEnum
 from services.openai_service import AzureOpenAIService
 
 logger = logging.getLogger(__name__)
+
 
 class SceneDescriptionService:
     def __init__(self):
@@ -439,93 +440,134 @@ class SceneDescriptionService:
             )
 
 
-    # @staticmethod
-    # def get_scenes_for_beat(
-    #     db: Session,
-    #     beat_id: UUID,
-    #     user_id: UUID
-    # ) -> List[Scene]:
-    #     """Get all scenes for a beat"""
-    #     scenes = db.query(Scene).join(Beat).join(Script).filter(
-    #         and_(
-    #             Scene.beat_id == beat_id,
-    #             Script.user_id == user_id,
-    #             Scene.is_deleted.is_(False)
-    #         )
-    #     ).order_by(Scene.position).all()
-
-    #     return scenes
-
-    # @staticmethod
-    # def update_scene(
-    #     db: Session,
-    #     scene_id: UUID,
-    #     user_id: UUID,
-    #     scene_update: SceneUpdate
-    # ) -> Scene:
-    #     """Update a scene"""
-    #     scene = db.query(Scene).join(Beat).join(Script).filter(
-    #         and_(
-    #             Scene.id == scene_id,
-    #             Script.user_id == user_id,
-    #             Scene.is_deleted.is_(False)
-    #         )
-    #     ).first()
-
-    #     if not scene:
-    #         raise HTTPException(
-    #             status_code=status.HTTP_404_NOT_FOUND,
-    #             detail="Scene not found or unauthorized access"
-    #         )
-
-    #     update_data = scene_update.model_dump(exclude_unset=True)
-    #     for field, value in update_data.items():
-    #         setattr(scene, field, value)
-
-    #     try:
-    #         db.commit()
-    #         db.refresh(scene)
-    #         return scene
-    #     except Exception as e:
-    #         db.rollback()
-    #         logger.error(f"Failed to update scene: {str(e)}")
-    #         raise HTTPException(
-    #             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-    #             detail="Failed to update scene"
-    #         )
-
-    # @staticmethod
-    # def delete_scene(
-    #     db: Session,
-    #     scene_id: UUID,
-    #     user_id: UUID
-    # ) -> bool:
-    #     """Soft delete a scene"""
-    #     scene = db.query(Scene).join(Beat).join(Script).filter(
-    #         and_(
-    #             Scene.id == scene_id,
-    #             Script.user_id == user_id,
-    #             Scene.is_deleted.is_(False)
-    #         )
-    #     ).first()
-
-    #     if not scene:
-    #         raise HTTPException(
-    #             status_code=status.HTTP_404_NOT_FOUND,
-    #             detail="Scene not found or unauthorized access"
-    #         )
-
-    #     scene.soft_delete()
-    #     try:
-    #         db.commit()
-    #         return True
-    #     except Exception as e:
-    #         db.rollback()
-    #         logger.error(f"Failed to delete scene: {str(e)}")
-    #         raise HTTPException(
-    #             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-    #             detail="Failed to delete scene"
-    #         )
+    async def generate_scene_description_for_act(
+        self,
+        db: Session,
+        script_id: UUID,
+        act: ActEnum,
+        user_id: UUID
+    ) -> Dict[str, Any]:
+        """
+        Generate scene descriptions for all beats in an act
         
+        Returns a consolidated list of all scenes with context tracking
+        which scenes were existing vs. newly generated.
+        
+        Args:
+            db: Database session
+            script_id: UUID of the script
+            act: The act enum value (act_1, act_2a, etc.)
+            user_id: UUID of the requesting user
+            
+        Returns:
+            Dictionary with context and consolidated list of generated_scenes
+        """
+        try:
+            # Verify script exists and user has access
+            script = db.query(Script).filter(
+                and_(
+                    Script.id == script_id,
+                    Script.user_id == user_id
+                )
+            ).first()
+            
+            logger.info(script)
+            if not script:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Script not found or unauthorized access"
+                )
+            
+            # Get all beats for this act
+            beats = db.query(Beat).filter(
+                and_(
+                    Beat.script_id == script.id,
+                    Beat.beat_act == act.value,
+                    or_(Beat.is_deleted.is_(False), Beat.is_deleted.is_(None))  # Match False or NULL
 
-
+                )
+            ).order_by(Beat.position).all()
+            logger.info(beats)
+            
+            if not beats:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"No beats found for act {act}"
+                )
+            
+            # Prepare response
+            all_scenes = []
+            existing_scene_indices = []
+            generated_scene_indices = []
+            
+            # Process each beat in the act
+            for beat in beats:
+                # Check if beat already has scene descriptions
+                existing_scenes = db.query(SceneDescription).filter(
+                    and_(
+                        SceneDescription.beat_id == beat.id,
+                        SceneDescription.is_deleted.is_(False)
+                    )
+                ).all()
+                
+                if existing_scenes:
+                    # Track existing scenes
+                    start_idx = len(all_scenes)
+                    scene_responses = [self.prepare_scene_response(scene) for scene in existing_scenes]
+                    all_scenes.extend(scene_responses)
+                    end_idx = len(all_scenes) - 1
+                    
+                    # Record index range for these existing scenes
+                    existing_scene_indices.append({
+                        "beat_id": str(beat.id),
+                        "beat_title": beat.beat_title,
+                        "start_idx": start_idx,
+                        "end_idx": end_idx
+                    })
+                else:
+                    # Generate new scenes for this beat
+                    generation_result = await self.generate_scene_description_for_beat(
+                        db=db,
+                        beat_id=beat.id,
+                        user_id=user_id
+                    )
+                    
+                    # Track generated scenes
+                    start_idx = len(all_scenes)
+                    scene_responses = generation_result.get("generated_scenes", [])
+                    all_scenes.extend(scene_responses)
+                    end_idx = len(all_scenes) - 1
+                    
+                    # Record index range for these generated scenes
+                    generated_scene_indices.append({
+                        "beat_id": str(beat.id),
+                        "beat_title": beat.beat_title,
+                        "start_idx": start_idx,
+                        "end_idx": end_idx
+                    })
+            
+            return {
+                "success": True,
+                "context": {
+                    "script_id": str(script_id),
+                    "script_title": script.title,
+                    "genre": script.genre,
+                    "act": act,
+                    "total_beats": len(beats),
+                    "existing": existing_scene_indices,
+                    "generated": generated_scene_indices,
+                    "source": "mixed" if (existing_scene_indices and generated_scene_indices) else 
+                            "existing" if existing_scene_indices else "generated"
+                },
+                "generated_scenes": all_scenes
+            }
+            
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"Act scene description generation failed: {str(e)}")
+            logger.error(traceback.format_exc())
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Failed to generate scene descriptions for act: {str(e)}"
+            )

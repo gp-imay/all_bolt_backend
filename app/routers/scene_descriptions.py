@@ -12,7 +12,9 @@ from schemas.scene_description import (
     BeatSceneDescriptionGenerationRequest,
     SceneDescriptionResult,
     SceneDescriptionResponsePost,
-    SceneDescriptionPatchRequest
+    SceneDescriptionPatchRequest,
+    ActSceneDescriptionGenerationRequest,
+    ActSceneDescriptionResult
 )
 from services.scene_description_service import SceneDescriptionService
 
@@ -86,3 +88,31 @@ async def update_scene_description(
         user_id=current_user.id,
         scene_detail=scene_update.scene_detail_for_ui
     )
+
+
+# @router.post("/act", response_model=ActSceneDescriptionResult)
+@router.post("/act")
+async def generate_scene_descriptions_for_act(
+    request: ActSceneDescriptionGenerationRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Generate scene descriptions for all beats in a specific act and store them in the database.
+    """
+    scene_service = SceneDescriptionService()
+    try:
+        result = await scene_service.generate_scene_description_for_act(
+            db=db,
+            script_id=request.script_id,
+            act=request.act,
+            user_id=current_user.id
+        )
+        return result
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to generate scene descriptions for act: {str(e)}"
+        )
