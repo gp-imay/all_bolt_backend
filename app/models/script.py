@@ -36,6 +36,8 @@ class Script(UUIDModel):
     user = relationship("User", back_populates="scripts")
     beats = relationship("Beat", back_populates="script", cascade="all, delete-orphan")
     scene_generations = relationship("SceneGenerationTracker", back_populates="script", cascade="all, delete-orphan")
+    scene_segments = relationship("SceneSegment", back_populates="script", cascade="all, delete-orphan")
+
 
     def __repr__(self):
         return f"<Script(id={self.id}, title={self.title}, genre={self.genre}), creation_method={self.creation_method})>>"

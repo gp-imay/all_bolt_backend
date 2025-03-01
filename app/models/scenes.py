@@ -14,6 +14,7 @@ class SceneDescription(UUIDModel, SoftDeleteMixin):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
     
+    scene_segments = relationship("SceneSegment", back_populates="scene_description", cascade="all, delete-orphan")
     # Relationship with Beat
     # beat = relationship("Beat", back_populates="scene_descriptions")
 

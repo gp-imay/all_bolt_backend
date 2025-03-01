@@ -69,6 +69,8 @@ class Beat(UUIDModel, SoftDeleteMixin):
     master_beat_sheet = relationship("MasterBeatSheet", back_populates="beats")
     scenes = relationship("Scene", back_populates="beat", cascade="all, delete-orphan")
     generation_attempts = relationship("SceneGenerationTracker", back_populates="beat")
+    scene_segments = relationship("SceneSegment", back_populates="beat", cascade="all, delete-orphan")
+
     # scene_descriptions = relationship("SceneDescription", back_populates="beats", cascade="all, delete-orphan")
 
 
