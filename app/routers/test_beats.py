@@ -5,6 +5,7 @@ from typing import List, Dict, Optional
 from database import get_db
 from services.openai_service import AzureOpenAIService
 from services.scene_description_service import SceneDescriptionService
+from schemas.scene_segment_ai import AISceneComponent, SceneSegmentGenerationRequest, ComponentType
 from pydantic import BaseModel
 from fastapi.responses import StreamingResponse
 import traceback
@@ -251,3 +252,66 @@ async def test_scene_generation(
             "success": False,
             "error": str(e.detail),
             "input": input_data.model_dump()}
+    
+def format_scene_components_to_fountain(components: List[AISceneComponent]) -> str:
+    """Helper function to format components as fountain text"""
+    fountain_text = ""
+    for comp in components:
+        if comp.component_type == ComponentType.HEADING:
+            fountain_text += f"{comp.content}\n\n"
+        elif comp.component_type == ComponentType.ACTION:
+            fountain_text += f"{comp.content}\n\n"
+        elif comp.component_type == ComponentType.DIALOGUE:
+            fountain_text += f"{comp.character_name}\n"
+            if comp.parenthetical:
+                fountain_text += f"({comp.parenthetical})\n"
+            fountain_text += f"{comp.content}\n\n"
+        elif comp.component_type == ComponentType.TRANSITION:
+            fountain_text += f"{comp.content}\n\n"
+    return fountain_text
+
+@router.post("/test-scene-segment-generation")
+async def test_scene_segment_generation(
+    request: SceneSegmentGenerationRequest,
+    db: Session = Depends(get_db)
+):
+    """
+    Test endpoint to generate a scene segment from a scene description.
+    This is for testing purposes only.
+    """
+    openai_service = AzureOpenAIService()
+    
+    try:
+        generated_segment = openai_service.generate_scene_segment(
+            story_synopsis=request.story_synopsis,
+            genre=request.genre,
+            arc_structure=request.arc_structure,
+            beat_position=request.beat_position,
+            template_beat_title=request.template_beat_title,
+            template_beat_definition=request.template_beat_definition,
+            story_specific_beat_title=request.story_specific_beat_title,
+            story_specific_beat_description=request.story_specific_beat_description,
+            scene_title=request.scene_title,
+            scene_description=request.scene_description,
+            min_word_count=request.min_word_count,
+            previous_scenes=request.previous_scenes
+        )
+        
+        # Convert to fountain text for display (if needed)
+        fountain_text = format_scene_components_to_fountain(generated_segment.components)
+        
+        return {
+            "success": True,
+            "input_context": request.model_dump(),
+            "generated_segment": generated_segment.model_dump(),
+            "fountain_text": fountain_text
+        }
+        
+    except Exception as e:
+        logger.error(f"Scene segment generation failed: {str(e)}")
+        logger.error(traceback.format_exc())
+        return {
+            "success": False,
+            "error": str(e),
+            "input_context": request.model_dump()
+        }

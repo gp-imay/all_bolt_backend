@@ -9,6 +9,10 @@ from openai import AzureOpenAI
 from config import settings
 import traceback
 
+
+from schemas.scene_segment_ai import GeneratedSceneSegment, AISceneComponent
+
+
 logger = logging.getLogger(__name__)
 
 
@@ -48,12 +52,12 @@ class GeneratedScene(BaseModel):
 
 class AzureOpenAIService:
     def __init__(self):
-        self.client = AzureOpenAI(
+        self.azure_client = AzureOpenAI(
             api_key=settings.AZURE_OPENAI_API_KEY,
             api_version=settings.AZURE_OPENAI_API_VERSION,
             azure_endpoint=settings.AZURE_OPENAI_ENDPOINT,
         )
-        self.client = from_openai(self.client, mode=Mode.TOOLS_STRICT)
+        self.client = from_openai(self.azure_client, mode=Mode.TOOLS_STRICT)
         self.deployment_name = settings.AZURE_OPENAI_DEPLOYMENT_NAME
 
     def _make_request(self, messages: List[dict]) -> List[Beat]:
@@ -298,6 +302,7 @@ class AzureOpenAIService:
             previous_scenes: List of previous scene titles for continuity
             num_scenes: Number of scenes to generate
         """
+        self.openai_service = AzureOpenAIService()
         system_prompt = f"""You are an expert screenplay writer specialized in {genre} films.
         Your task is to generate {num_scenes} unique and compelling scenes that fulfill the requirements of a specific beat in the screenplay.
         
@@ -353,4 +358,96 @@ class AzureOpenAIService:
 
         except Exception as e:
             logger.error(f"Scene generation failed: {str(e)}")
+            raise
+
+    # @staticmethod
+    def generate_scene_segment(
+        self,
+        story_synopsis: str,
+        genre: str,
+        arc_structure: str,
+        beat_position: int,
+        template_beat_title: str,
+        template_beat_definition: str,
+        story_specific_beat_title: str,
+        story_specific_beat_description: str,
+        scene_title: str,
+        scene_description: str,
+        min_word_count: int = 200,
+        previous_scenes: Optional[List[str]] = None
+    ) -> GeneratedSceneSegment:
+        """
+        Generate a screenplay scene with structured components using instructor.
+        
+        Returns a GeneratedSceneSegment object with components that can be directly
+        added to the database.
+        """
+        system_prompt = f"""You are an expert screenplay writer specialized in {genre} films.
+        Your task is to write a compelling, detailed scene based on the provided scene description.
+        
+        Follow these rules for screenplay formatting:
+        1. Scene headings must be in uppercase (e.g., "INT. LIVING ROOM - DAY")
+        2. Action/description paragraphs should be concise but vivid
+        3. Character names should be in uppercase when preceding dialogue
+        4. Parentheticals for character directions should be in (parentheses)
+        5. Dialogue should feel natural and match the character's voice
+        6. Use transitions (e.g., CUT TO:, DISSOLVE TO:) sparingly and only when necessary
+        
+        The scene should have these components in this order:
+        1. A scene heading (HEADING type)
+        2. Action descriptions (ACTION type)
+        3. Character dialogue (CHARACTER type) with optional parentheticals
+        4. Additional action and dialogue as needed
+        5. Optional transition (TRANSITION type)
+        
+        Ensure your scene:
+        - Maintains the tone and style appropriate for {genre}
+        - Contains at least {min_word_count} words total
+        - Advances the story while developing characters
+        - Is consistent with the beat's purpose in the overall story arc
+        - Is consistent with the scene's title and descriiption
+        """
+
+        user_prompt = f"""Write a screenplay scene based on the following context:
+
+        Story Synopsis: {story_synopsis}
+        Genre: {genre}
+        Story Arc: {arc_structure}
+        
+        Beat Information:
+        - Beat Position: {beat_position}
+        - Template Beat: {template_beat_title}
+        - Template Definition: {template_beat_definition}
+        - Story-Specific Beat Title: {story_specific_beat_title}
+        - Story-Specific Description: {story_specific_beat_description}
+        
+        Scene Information:
+        - Scene Heading: {scene_title}
+        - Scene Description: {scene_description}
+        
+        {f'Previous Scenes: {", ".join(previous_scenes)}' if previous_scenes else ''}
+        
+        Return a structured scene with multiple components (heading, action, character, dialogue etc.)
+        Each component should have a position value starting at 1000.0 and incrementing by 1000.0.
+        Make the scene engaging, visual, and at least {min_word_count} words in total.
+        """
+
+        try:
+            # Use instructor's from_openai wrapper to get structured output
+            response = self.client.chat.completions.create(
+                model=self.deployment_name,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt}
+                ],
+                response_model=GeneratedSceneSegment,
+                max_tokens=settings.AZURE_OPENAI_MAX_TOKENS,
+                temperature=settings.AZURE_OPENAI_TEMPERATURE,
+            )
+            
+            return response
+
+        except Exception as e:
+            logger.error(f"Scene segment generation failed: {str(e)}")
+            logger.error(traceback.format_exc())
             raise
