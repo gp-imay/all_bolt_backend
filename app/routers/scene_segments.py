@@ -24,6 +24,10 @@ from schemas.scene_segment import (
 )
 from services.scene_segment_service import SceneSegmentService
 
+from services.scene_segment_ai_service import SceneSegmentAIService
+from schemas.scene_segment_ai import SceneSegmentGenerationResponse, ScriptSceneGenerationRequestUser
+
+
 from models import scene_segments
 
 logger = logging.getLogger(__name__)
@@ -313,3 +317,21 @@ async def auto_format_component(
     Automatically apply formatting corrections to a component based on screenplay conventions.
     """
     return SceneSegmentService.auto_format_component(db, component_id)
+
+@router.post("/ai/generate-next", response_model=SceneSegmentGenerationResponse)
+async def generate_next_segment(
+    request: ScriptSceneGenerationRequestUser,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Generate a scene segment for the next available scene without a segment.
+    The system automatically finds the next scene description without a segment
+    and generates content for it.
+    """
+    ai_service = SceneSegmentAIService()
+    return await ai_service.generate_next_segment(
+        db=db,
+        script_id=request.script_id,
+        user_id=current_user.id
+    )

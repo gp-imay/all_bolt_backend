@@ -1,9 +1,13 @@
 # app/schemas/scene_segment_ai.py
 
 from pydantic import BaseModel, UUID4, Field
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 from enum import Enum
 from schemas.scene_segment import ComponentType  # Import existing enum
+
+class ScriptSceneGenerationRequestUser(BaseModel):
+    script_id: UUID4
+
 
 class SceneSegmentGenerationRequest(BaseModel):
     script_id: UUID4
@@ -44,3 +48,13 @@ class AISceneGenerationResponse(BaseModel):
     generated_segment: Optional[GeneratedSceneSegment] = None
     fountain_text: Optional[str] = None
     error: Optional[str] = None
+
+class SceneSegmentGenerationResponse(BaseModel):
+    success: bool
+    input_context: Optional[Dict[str, Any]] = None
+    generated_segment: Optional[GeneratedSceneSegment] = None
+    fountain_text: Optional[str] = None
+    error: Optional[str] = None
+    scene_segment_id: Optional[UUID4] = None
+    creation_method: str
+    message: str

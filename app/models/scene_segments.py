@@ -14,7 +14,7 @@ class ComponentType(str, enum.Enum):
     ACTION = "ACTION"
     DIALOGUE = "DIALOGUE"
     TRANSITION = "TRANSITION"
-
+    CHARACTER = "CHARACTER"
 
 class SceneSegment(UUIDModel, SoftDeleteMixin):
     """

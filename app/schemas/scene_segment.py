@@ -9,8 +9,8 @@ class ComponentType(str, Enum):
     HEADING = "HEADING"
     ACTION = "ACTION"
     DIALOGUE = "DIALOGUE"
+    CHARACTER = "CHARACTER"
     TRANSITION = "TRANSITION"
-
 
 # Base models for components
 class ComponentBase(BaseModel):

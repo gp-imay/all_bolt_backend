@@ -367,6 +367,7 @@ class AzureOpenAIService:
         genre: str,
         arc_structure: str,
         beat_position: int,
+        scene_position: int,
         template_beat_title: str,
         template_beat_definition: str,
         story_specific_beat_title: str,
@@ -422,6 +423,7 @@ class AzureOpenAIService:
         - Story-Specific Description: {story_specific_beat_description}
         
         Scene Information:
+        - Scene Position: {scene_position}
         - Scene Heading: {scene_title}
         - Scene Description: {scene_description}
         
