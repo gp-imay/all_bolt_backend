@@ -13,7 +13,9 @@ from models.script import Script, ScriptCreationMethod
 from models.beats import Beat, MasterBeatSheet, ActEnum
 from models.scenes import SceneDescription
 from models.scene_segments import SceneSegment, SceneSegmentComponent, ComponentType
-from schemas.scene_segment_ai import GeneratedSceneSegment, SceneSegmentGenerationResponse, AISceneComponent
+from schemas.scene_segment_ai import (GeneratedSceneSegment, SceneSegmentGenerationResponse, 
+                                      AISceneComponent, AISceneSegmentGenerationResponse,
+                                      AISceneComponentResponse, GeneratedSceneSegmentResponseResponse)
 
 
 from services.openai_service import AzureOpenAIService
@@ -177,7 +179,6 @@ class SceneSegmentAIService:
                 )
             )
             .order_by(Beat.position, SceneDescription.position)
-            .limit(5)
             .all()
         ]
         input_context = {
@@ -229,13 +230,14 @@ class SceneSegmentAIService:
                     "component_type": comp.component_type,
                     "position": comp.position,
                     "content": comp.content,
+
                 }
                 
                 # Add dialogue-specific fields if applicable
                 if comp.component_type == ComponentType.DIALOGUE:
                     component_data["character_name"] = comp.character_name
                     component_data["parenthetical"] = comp.parenthetical
-                
+                component_data["id"] = comp.id
                 component_create = ComponentCreate(**component_data)
                 component_models.append(component_create)
             
@@ -274,4 +276,83 @@ class SceneSegmentAIService:
             error=str(e)
         )
 
-
+    async def get_or_generate_first_segment(
+        self,
+        db: Session,
+        script_id: UUID,
+        user_id: UUID
+    ) -> AISceneSegmentGenerationResponse:
+        """
+        Get the first scene segment for a script or generate it if it doesn't exist.
+        
+        Args:
+            db: Database session
+            script_id: UUID of the script
+            user_id: UUID of the requesting user
+            
+        Returns:
+            SceneSegmentGenerationResponse with either existing or generated segment
+        """
+        # Verify script exists and user has access
+        script = db.query(Script).filter(
+            Script.id == script_id,
+            Script.user_id == user_id
+        ).first()
+        
+        if not script:
+            return SceneSegmentGenerationResponse(
+                success=False,
+                creation_method="UNKNOWN",
+                message="Script not found or unauthorized access",
+                error="Script not found"
+            )
+        
+        # Check if script has any existing scene segments
+        existing_segment = db.query(SceneSegment).filter(
+            SceneSegment.script_id == script_id,
+            SceneSegment.is_deleted.is_(False)
+        ).order_by(SceneSegment.segment_number).first()
+        
+        if existing_segment:
+            # Return existing first segment
+            components = db.query(SceneSegmentComponent).filter(
+                SceneSegmentComponent.scene_segment_id == existing_segment.id,
+                SceneSegmentComponent.is_deleted.is_(False)
+            ).order_by(SceneSegmentComponent.position).all()
+            
+            # Convert to AISceneComponent format for response
+            ai_components = []
+            for comp in components:
+                ai_component = AISceneComponentResponse(
+                    component_type=comp.component_type,
+                    position=comp.position,
+                    content=comp.content,
+                    character_name=comp.character_name,
+                    parenthetical=comp.parenthetical,
+                    component_id=comp.id
+                )
+                ai_components.append(ai_component)
+            
+            # Format fountain text for display
+            fountain_text = self.format_scene_components_to_fountain(ai_components)
+            
+            return AISceneSegmentGenerationResponse(
+                success=True,
+                input_context={
+                    "script_id": str(script.id),
+                    "script_title": script.title,
+                    "source": "existing"
+                },
+                generated_segment=GeneratedSceneSegmentResponseResponse(components=ai_components),
+                fountain_text=fountain_text,
+                scene_segment_id=existing_segment.id,
+                creation_method=script.creation_method.value,
+                message="Found existing first scene segment"
+            )
+        else:
+            # No existing segment, generate a new one
+            return await self.generate_next_segment(
+                db=db,
+                script_id=script_id,
+                user_id=user_id
+            )

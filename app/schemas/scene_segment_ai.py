@@ -38,9 +38,32 @@ class AISceneComponent(BaseModel):
     content: str
     character_name: Optional[str] = None
     parenthetical: Optional[str] = None
+    # component_id : UUID4
 
 class GeneratedSceneSegment(BaseModel):
     components: List[AISceneComponent]
+
+
+class AISceneComponentResponse(BaseModel):
+    component_type: ComponentTypeAI
+    position: float
+    content: str
+    character_name: Optional[str] = None
+    parenthetical: Optional[str] = None
+    component_id : UUID4
+
+class GeneratedSceneSegmentResponseResponse(BaseModel):
+    components: List[AISceneComponentResponse]
+
+class AISceneSegmentGenerationResponse(BaseModel):
+    success: bool
+    input_context: Optional[Dict[str, Any]] = None
+    generated_segment: Optional[GeneratedSceneSegmentResponseResponse] = None
+    fountain_text: Optional[str] = None
+    error: Optional[str] = None
+    scene_segment_id: Optional[UUID4] = None
+    creation_method: str
+    message: str
 
 class AISceneGenerationResponse(BaseModel):
     success: bool

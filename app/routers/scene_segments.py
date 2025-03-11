@@ -25,7 +25,7 @@ from schemas.scene_segment import (
 from services.scene_segment_service import SceneSegmentService
 
 from services.scene_segment_ai_service import SceneSegmentAIService
-from schemas.scene_segment_ai import SceneSegmentGenerationResponse, ScriptSceneGenerationRequestUser
+from schemas.scene_segment_ai import SceneSegmentGenerationResponse, ScriptSceneGenerationRequestUser, AISceneSegmentGenerationResponse
 
 
 from models import scene_segments
@@ -331,6 +331,27 @@ async def generate_next_segment(
     """
     ai_service = SceneSegmentAIService()
     return await ai_service.generate_next_segment(
+        db=db,
+        script_id=request.script_id,
+        user_id=current_user.id
+    )
+
+
+@router.post("/ai/get-or-generate-first", response_model=AISceneSegmentGenerationResponse)
+async def get_or_generate_first_segment(
+    request: ScriptSceneGenerationRequestUser,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Get the first scene segment for a script or generate it if it doesn't exist.
+    
+    This endpoint first checks if a scene segment already exists for the script.
+    If one exists, it returns the first segment. If no segment exists, it uses
+    AI to generate the first segment and returns it.
+    """
+    ai_service = SceneSegmentAIService()
+    return await ai_service.get_or_generate_first_segment(
         db=db,
         script_id=request.script_id,
         user_id=current_user.id

@@ -29,7 +29,10 @@ class ComponentBase(BaseModel):
 
 
 class ComponentCreate(ComponentBase):
+    id: UUID4
     pass
+    class Config:
+        from_attributes = True
 
 
 class Component(ComponentBase):
