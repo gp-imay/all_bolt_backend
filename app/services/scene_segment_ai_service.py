@@ -81,7 +81,7 @@ class SceneSegmentAIService:
         db: Session,
         script_id: UUID,
         user_id: UUID
-    ) -> SceneSegmentGenerationResponse:
+    ) -> AISceneSegmentGenerationResponse:
         """
         Generate a scene segment for the next available scene without a segment.
         """
@@ -108,7 +108,7 @@ class SceneSegmentAIService:
         next_scene = self.find_next_scene_without_segment(db, script_id)
         
         if not next_scene:
-            return SceneSegmentGenerationResponse(
+            return AISceneSegmentGenerationResponse(
                 success=False,
                 creation_method=script.creation_method.value,
                 message="All scenes already have segments generated"
@@ -118,7 +118,7 @@ class SceneSegmentAIService:
         # Get beat information
         beat = db.query(Beat).filter(Beat.id == next_scene.beat_id).first()
         if not beat:
-            return SceneSegmentGenerationResponse(
+            return AISceneSegmentGenerationResponse(
                 success=False,
                 input_context={
                     "script_id": str(script_id),
@@ -135,7 +135,7 @@ class SceneSegmentAIService:
         ).first()
         
         if not master_beat_sheet:
-            return SceneSegmentGenerationResponse(
+            return AISceneSegmentGenerationResponse(
                 success=False,
                 input_context={
                     "script_id": str(script_id),
@@ -182,18 +182,18 @@ class SceneSegmentAIService:
             .all()
         ]
         input_context = {
-        "script_id": str(script_id),
-        "script_title": script.title,
-        "genre": script.genre,
-        "beat_id": str(beat.id),
-        "beat_title": beat.beat_title,
-        "beat_position": beat.position,
-        "scene_description_id": str(next_scene.id),
-        "scene_title": next_scene.scene_heading,
-        "scene_description": next_scene.scene_description,
-        "scene_position": next_scene.position,
-        "min_word_count": min_word_count,
-        "previous_scenes": previous_scenes
+            "script_id": str(script_id),
+            "script_title": script.title,
+            "genre": script.genre,
+            "beat_id": str(beat.id),
+            "beat_title": beat.beat_title,
+            "beat_position": beat.position,
+            "scene_description_id": str(next_scene.id),
+            "scene_title": next_scene.scene_heading,
+            "scene_description": next_scene.scene_description,
+            "scene_position": next_scene.position,
+            "min_word_count": min_word_count,
+            "previous_scenes": previous_scenes
         }
 
         # Generate scene segment using OpenAI
@@ -213,8 +213,7 @@ class SceneSegmentAIService:
                 min_word_count=min_word_count,
                 previous_scenes=previous_scenes
             )
-            fountain_text = self.format_scene_components_to_fountain(generated_segment.components)
-
+            
             # Get the next available segment number
             next_segment_number = SceneSegmentService.fetch_next_segment_number(db, script_id)
             if next_segment_number is None:
@@ -223,6 +222,7 @@ class SceneSegmentAIService:
                 next_segment_number += 1000.0
             
             # Create components for creation
+            import uuid
             from schemas.scene_segment import ComponentCreate
             component_models = []
             for comp in generated_segment.components:
@@ -230,14 +230,14 @@ class SceneSegmentAIService:
                     "component_type": comp.component_type,
                     "position": comp.position,
                     "content": comp.content,
-
+                    "id": uuid.uuid4()  # Generate a UUID for each component
                 }
                 
                 # Add dialogue-specific fields if applicable
                 if comp.component_type == ComponentType.DIALOGUE:
                     component_data["character_name"] = comp.character_name
                     component_data["parenthetical"] = comp.parenthetical
-                component_data["id"] = comp.id
+                
                 component_create = ComponentCreate(**component_data)
                 component_models.append(component_create)
             
@@ -254,27 +254,49 @@ class SceneSegmentAIService:
             # Use existing service to create the segment
             created_segment = SceneSegmentService.create_scene_segment(db, segment_create)
             
-            return SceneSegmentGenerationResponse(
+            # Query the database for the components of the created segment
+            components = db.query(SceneSegmentComponent).filter(
+                SceneSegmentComponent.scene_segment_id == created_segment.id,
+                SceneSegmentComponent.is_deleted.is_(False)
+            ).order_by(SceneSegmentComponent.position).all()
+            
+            # Create AISceneComponentResponse objects using database component IDs
+            ai_components = []
+            for comp in components:
+                ai_component = AISceneComponentResponse(
+                    component_type=comp.component_type,
+                    position=comp.position,
+                    content=comp.content,
+                    character_name=comp.character_name,
+                    parenthetical=comp.parenthetical,
+                    component_id=comp.id
+                )
+                ai_components.append(ai_component)
+            
+            # Format fountain text using the AI components
+            fountain_text = self.format_scene_components_to_fountain(generated_segment.components)
+            
+            # Return AISceneSegmentGenerationResponse with properly structured components
+            return AISceneSegmentGenerationResponse(
                 success=True,
                 input_context=input_context,
-                generated_segment=generated_segment,
+                generated_segment=GeneratedSceneSegmentResponseResponse(components=ai_components),
                 fountain_text=fountain_text,
                 scene_segment_id=created_segment.id,
                 creation_method=script.creation_method.value,
                 message="Successfully generated scene segment"
-                )
-
-            
+            )
+                
         except Exception as e:
             logger.error(f"Failed to generate scene segment: {str(e)}")
             logger.error(traceback.format_exc())
-            return SceneSegmentGenerationResponse(
-            success=False,
-            input_context=input_context,
-            creation_method=script.creation_method.value,
-            message="Failed to generate scene segment",
-            error=str(e)
-        )
+            return AISceneSegmentGenerationResponse(
+                success=False,
+                input_context=input_context,
+                creation_method=script.creation_method.value,
+                message="Failed to generate scene segment",
+                error=str(e)
+            )
 
     async def get_or_generate_first_segment(
         self,

@@ -318,7 +318,7 @@ async def auto_format_component(
     """
     return SceneSegmentService.auto_format_component(db, component_id)
 
-@router.post("/ai/generate-next", response_model=SceneSegmentGenerationResponse)
+@router.post("/ai/generate-next", response_model=AISceneSegmentGenerationResponse)
 async def generate_next_segment(
     request: ScriptSceneGenerationRequestUser,
     current_user: User = Depends(get_current_user),
