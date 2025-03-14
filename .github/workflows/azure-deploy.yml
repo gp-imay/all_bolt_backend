@@ -87,6 +87,103 @@ jobs:
         with:
           app-name: ${{ env.DEV_APP_NAME }}
           images: ${{ env.REGISTRY_NAME }}.azurecr.io/${{ env.IMAGE_NAME }}:${{ github.sha }}
+          container-settings: |
+            {
+              "appSettings": [
+                {
+                  "name": "APP_NAME",
+                  "value": "Script Manager"
+                },
+                {
+                  "name": "API_V1_PREFIX",
+                  "value": "/api/v1"
+                },
+                {
+                  "name": "DEBUG",
+                  "value": "True"
+                },
+                {
+                  "name": "DATABASE_URL",
+                  "value": "postgresql+psycopg2://adminuser_gp:Gp_password!@script-manager-db-dev.postgres.database.azure.com:5432/script_manager"
+                },
+                {
+                  "name": "DB_POOL_SIZE",
+                  "value": "5"
+                },
+                {
+                  "name": "DB_MAX_OVERFLOW",
+                  "value": "10"
+                },
+                {
+                  "name": "DB_POOL_TIMEOUT",
+                  "value": "30"
+                },
+                {
+                  "name": "DB_ECHO",
+                  "value": "False"
+                },
+                {
+                  "name": "SUPABASE_URL",
+                  "value": "${{ secrets.SUPABASE_URL }}"
+                },
+                {
+                  "name": "SUPABASE_KEY",
+                  "value": "${{ secrets.SUPABASE_KEY }}"
+                },
+                {
+                  "name": "SUPABASE_JWT_SECRET",
+                  "value": "${{ secrets.SUPABASE_JWT_SECRET }}"
+                },
+                {
+                  "name": "JWT_ALGORITHM",
+                  "value": "HS256"
+                },
+                {
+                  "name": "ACCESS_TOKEN_EXPIRE_MINUTES",
+                  "value": "30"
+                },
+                {
+                  "name": "LOG_LEVEL",
+                  "value": "INFO"
+                },
+                {
+                  "name": "AZURE_OPENAI_ENDPOINT",
+                  "value": "${{ secrets.AZURE_OPENAI_ENDPOINT }}"
+                },
+                {
+                  "name": "AZURE_OPENAI_API_KEY",
+                  "value": "${{ secrets.AZURE_OPENAI_API_KEY }}"
+                },
+                {
+                  "name": "AZURE_OPENAI_API_VERSION",
+                  "value": "2024-02-15-preview"
+                },
+                {
+                  "name": "AZURE_OPENAI_DEPLOYMENT_NAME",
+                  "value": "${{ secrets.AZURE_OPENAI_DEPLOYMENT_NAME }}"
+                },
+                {
+                  "name": "AZURE_OPENAI_MAX_TOKENS",
+                  "value": "2000"
+                },
+                {
+                  "name": "AZURE_OPENAI_TEMPERATURE",
+                  "value": "0.7"
+                },
+                {
+                  "name": "ENVIRONMENT",
+                  "value": "development"
+                },
+                {
+                  "name": "ENABLE_TEST_ENDPOINTS",
+                  "value": "True"
+                },
+                {
+                  "name": "CORS_ORIGINS",
+                  "value": "https://your-frontend-domain.azurewebsites.net,http://localhost:5173"
+                }
+              ]
+            }
 
       # - name: Run database migrations
       #   run: |
