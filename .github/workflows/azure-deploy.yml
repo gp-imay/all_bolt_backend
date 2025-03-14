@@ -63,7 +63,8 @@ jobs:
         uses: actions/upload-artifact@v3
         with:
           name: build-info
-          path: ./build-info/build-info.json
+          path: ./build-info
+
 
   deploy-dev:
     needs: build
