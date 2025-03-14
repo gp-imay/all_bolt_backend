@@ -41,7 +41,7 @@ COPY --from=builder /usr/local/bin /usr/local/bin
 COPY ./app /app/app
 
 # Copy .env file
-COPY ./app/.env /app/.env
+# COPY ./app/.env /app/.env
 
 # Run the application
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
