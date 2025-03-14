@@ -5,10 +5,10 @@ from typing import List, Optional
 from uuid import UUID
 import logging
 
-from models.script import Script
-from models.beats import Beat, MasterBeatSheet, BeatSheetType
-from schemas.beat import BeatCreate, BeatUpdate
-from schemas.script import ScriptCreationMethod
+from app.models.script import Script
+from app.models.beats import Beat, MasterBeatSheet, BeatSheetType
+from app.schemas.beat import BeatCreate, BeatUpdate
+from app.schemas.script import ScriptCreationMethod
 
 logger = logging.getLogger(__name__)
 

@@ -6,7 +6,7 @@ from sqlalchemy.dialects.postgresql import UUID
 import enum
 from typing import Optional
 
-from models.base import UUIDModel, SoftDeleteMixin
+from app.models.base import UUIDModel, SoftDeleteMixin
 
 
 class ComponentType(str, enum.Enum):

@@ -9,12 +9,12 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-from models.script import Script, ScriptCreationMethod
-from models.beats import Beat, MasterBeatSheet, BeatSheetType, ActEnum
-from schemas.script import ScriptCreate, ScriptUpdate
-from schemas.beat import ScriptWithBeatsResponse, BeatResponse
+from app.models.script import Script, ScriptCreationMethod
+from app.models.beats import Beat, MasterBeatSheet, BeatSheetType, ActEnum
+from app.schemas.script import ScriptCreate, ScriptUpdate
+from app.schemas.beat import ScriptWithBeatsResponse, BeatResponse
 
-from services.openai_service import AzureOpenAIService
+from app.services.openai_service import AzureOpenAIService
 
 
 class ScriptService:

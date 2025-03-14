@@ -8,12 +8,12 @@ from typing import List
 import logging
 import time
 
-from config import settings
-from database import engine, Base
-from models import users, script  # This ensures models are imported for migrations
+from app.config import settings
+from app.database import engine, Base
+from app.models import users, script  # This ensures models are imported for migrations
 
 # Import routers
-from routers import users, scripts, test_beats, beats, scenes, scene_descriptions, scene_segments
+from app.routers import users, scripts, test_beats, beats, scenes, scene_descriptions, scene_segments
 
 # Configure logging
 logging.basicConfig(

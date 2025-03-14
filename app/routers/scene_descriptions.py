@@ -4,10 +4,10 @@ from sqlalchemy.orm import Session
 from typing import List
 from uuid import UUID
 
-from database import get_db
-from auth.dependencies import get_current_user
-from schemas.user import User
-from schemas.scene_description import (
+from app.database import get_db
+from app.auth.dependencies import get_current_user
+from app.schemas.user import User
+from app.schemas.scene_description import (
     SceneDescriptionResponse,
     BeatSceneDescriptionGenerationRequest,
     SceneDescriptionResult,
@@ -16,7 +16,7 @@ from schemas.scene_description import (
     ActSceneDescriptionGenerationRequest,
     ActSceneDescriptionResult
 )
-from services.scene_description_service import SceneDescriptionService
+from app.services.scene_description_service import SceneDescriptionService
 
 router = APIRouter()
 

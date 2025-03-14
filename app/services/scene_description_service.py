@@ -10,13 +10,13 @@ import logging
 import json
 import traceback
 
-from models.scenes import SceneDescription
-from models.beats import Beat
-from models.script import Script
-from models.beats import Beat, MasterBeatSheet
+from app.models.scenes import SceneDescription
+from app.models.beats import Beat
+from app.models.script import Script
+from app.models.beats import Beat, MasterBeatSheet
 
-from schemas.scene_description import SceneDescriptionResponse, SceneDescriptionResponsePost, ActEnum
-from services.openai_service import AzureOpenAIService
+from app.schemas.scene_description import SceneDescriptionResponse, SceneDescriptionResponsePost, ActEnum
+from app.services.openai_service import AzureOpenAIService
 
 logger = logging.getLogger(__name__)
 

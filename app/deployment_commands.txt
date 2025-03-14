@@ -1,0 +1,3 @@
+az ad sp create-for-rbac --name "script-manager-github" --role contributor \
+  --scopes /subscriptions/36bdc8b2-631f-47fb-bf76-08269f839328/resourceGroups/script-manager-rg \
+  --sdk-auth

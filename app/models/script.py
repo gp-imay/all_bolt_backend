@@ -3,7 +3,7 @@ from sqlalchemy import Column, String, DateTime, ForeignKey, Text, Boolean, Inte
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from sqlalchemy.dialects.postgresql import UUID
-from models.base import UUIDModel
+from app.models.base import UUIDModel
 import enum
 
 class ScriptCreationMethod(str, enum.Enum):

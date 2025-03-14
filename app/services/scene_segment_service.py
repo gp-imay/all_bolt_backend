@@ -6,11 +6,11 @@ from typing import List, Optional, Dict, Any, Tuple
 from uuid import UUID
 import logging
 
-from models.scene_segments import SceneSegment, SceneSegmentComponent, ComponentType
-from models.script import Script
-from models.beats import Beat
-from models.scenes import SceneDescription
-from schemas.scene_segment import SceneSegmentCreate, SceneSegmentUpdate, ComponentCreate, ComponentUpdate
+from app.models.scene_segments import SceneSegment, SceneSegmentComponent, ComponentType
+from app.models.script import Script
+from app.models.beats import Beat
+from app.models.scenes import SceneDescription
+from app.schemas.scene_segment import SceneSegmentCreate, SceneSegmentUpdate, ComponentCreate, ComponentUpdate
 
 logger = logging.getLogger(__name__)
 

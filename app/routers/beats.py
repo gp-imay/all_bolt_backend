@@ -6,8 +6,8 @@ from typing import List, Optional
 from uuid import UUID
 from typing import List
 
-from database import get_db
-from schemas.script import (
+from app.database import get_db
+from app.schemas.script import (
     Script,
     ScriptCreate,
     ScriptUpdate,
@@ -15,14 +15,14 @@ from schemas.script import (
     ScriptList,
     ScriptOutForUI
 )
-from services.script_service import ScriptService
-from services.azure_service import AzureStorageService
-from services.beat_service import BeatSheetService
-from auth.dependencies import get_current_user
-from schemas.user import User
-from schemas.beat import ScriptWithBeatsResponse, BeatResponse, BeatUpdate
-from schemas.script import ScriptCreationMethod
-from models.beats import MasterBeatSheet, Beat
+from app.services.script_service import ScriptService
+from app.services.azure_service import AzureStorageService
+from app.services.beat_service import BeatSheetService
+from app.auth.dependencies import get_current_user
+from app.schemas.user import User
+from app.schemas.beat import ScriptWithBeatsResponse, BeatResponse, BeatUpdate
+from app.schemas.script import ScriptCreationMethod
+from app.models.beats import MasterBeatSheet, Beat
 
 
 router = APIRouter()

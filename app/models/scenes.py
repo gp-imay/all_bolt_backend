@@ -2,7 +2,7 @@ from sqlalchemy import Column, String, DateTime, ForeignKey, Text, Integer, Uniq
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from sqlalchemy.dialects.postgresql import UUID
-from models.base import UUIDModel, SoftDeleteMixin
+from app.models.base import UUIDModel, SoftDeleteMixin
 
 class SceneDescription(UUIDModel, SoftDeleteMixin):
     __tablename__ = "scene_description_beats"

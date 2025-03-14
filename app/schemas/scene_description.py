@@ -2,7 +2,8 @@
 from pydantic import BaseModel, UUID4, Field
 from typing import Optional, List, Dict, Any
 from datetime import datetime
-from schemas.scene import ActEnum
+
+from app.schemas.scene import ActEnum
 
 class SceneBase(BaseModel):
     scene_heading: str = Field(..., min_length=1, max_length=255)

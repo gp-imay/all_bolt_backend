@@ -5,9 +5,9 @@ from sqlalchemy.orm import Session
 # from jose import JWTError
 # import jwt
 from jose import JWTError, jwt
-from database import get_db
-from config import settings
-from services.user_service import UserService
+from app.database import get_db
+from app.config import settings
+from app.services.user_service import UserService
 from typing import Optional
 import json
 

@@ -6,11 +6,11 @@ from typing import List, Generator, Dict, Any, Optional
 from pydantic import BaseModel
 from instructor import from_openai, Mode
 from openai import AzureOpenAI
-from config import settings
+from app.config import settings
 import traceback
 
 
-from schemas.scene_segment_ai import GeneratedSceneSegment, AISceneComponent
+from app.schemas.scene_segment_ai import GeneratedSceneSegment, AISceneComponent
 
 
 logger = logging.getLogger(__name__)

@@ -2,7 +2,7 @@ from sqlalchemy import Column, String, DateTime, ForeignKey, Text, JSON, Enum, I
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from sqlalchemy.dialects.postgresql import UUID, JSONB
-from models.base import UUIDModel
+from app.models.base import UUIDModel
 import enum
 
 class SoftDeleteMixin:

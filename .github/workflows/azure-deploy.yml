@@ -1,0 +1,110 @@
+name: Deploy FastAPI to Azure
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+  workflow_dispatch:  # Allows manual trigger
+
+env:
+  IMAGE_NAME: script-manager-api
+  REGISTRY_NAME: scriptwriterbackend
+  DEV_APP_NAME: script-manager-api-dev
+  PROD_APP_NAME: script-manager-api-prod
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+
+      - name: Log in to Azure Container Registry
+        uses: docker/login-action@v2
+        with:
+          registry: ${{ env.REGISTRY_NAME }}.azurecr.io
+          username: ${{ secrets.REGISTRY_USERNAME }}
+          password: ${{ secrets.REGISTRY_PASSWORD }}
+
+      - name: Set environment variables
+        id: set-env
+        run: |
+          if [[ ${{ github.ref }} == 'refs/heads/main' ]]; then
+            echo "IS_DEV=true" >> $GITHUB_ENV
+            echo "IS_PROD=false" >> $GITHUB_ENV
+          elif [[ ${{ github.ref }} == 'refs/heads/deploy' ]]; then
+            echo "IS_DEV=false" >> $GITHUB_ENV
+            echo "IS_PROD=true" >> $GITHUB_ENV
+          else
+            echo "IS_DEV=false" >> $GITHUB_ENV
+            echo "IS_PROD=false" >> $GITHUB_ENV
+          fi
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v4
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ env.REGISTRY_NAME }}.azurecr.io/${{ env.IMAGE_NAME }}:${{ github.sha }}
+            ${{ env.REGISTRY_NAME }}.azurecr.io/${{ env.IMAGE_NAME }}:${{ env.IS_DEV == 'true' && 'dev-latest' || 'latest' }}
+
+      - name: Create build info
+        if: ${{ success() }}
+        run: |
+          mkdir -p ./build-info
+          echo "{\"commit\":\"${{ github.sha }}\",\"branch\":\"${{ github.ref }}\",\"timestamp\":\"$(date -u +"%Y-%m-%dT%H:%M:%SZ")\"}" > ./build-info/build-info.json
+          
+      - name: Upload build info
+        uses: actions/upload-artifact@v3
+        with:
+          name: build-info
+          path: ./build-info/build-info.json
+
+  deploy-dev:
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/develop'
+    environment: development
+    steps:
+      - name: Azure login
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Deploy to Azure Web App
+        uses: azure/webapps-deploy@v2
+        with:
+          app-name: ${{ env.DEV_APP_NAME }}
+          images: ${{ env.REGISTRY_NAME }}.azurecr.io/${{ env.IMAGE_NAME }}:${{ github.sha }}
+
+      - name: Run database migrations
+        run: |
+          az webapp ssh --resource-group your-resource-group --name ${{ env.DEV_APP_NAME }} --command "cd site/wwwroot && python -m alembic upgrade head"
+
+  deploy-prod:
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    environment:
+      name: production
+      url: https://script-manager-api-prod.azurewebsites.net
+    steps:
+      - name: Azure login
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Deploy to Azure Web App
+        uses: azure/webapps-deploy@v2
+        with:
+          app-name: ${{ env.PROD_APP_NAME }}
+          images: ${{ env.REGISTRY_NAME }}.azurecr.io/${{ env.IMAGE_NAME }}:${{ github.sha }}
+
+      - name: Run database migrations
+        run: |
+          az webapp ssh --resource-group your-resource-group --name ${{ env.PROD_APP_NAME }} --command "cd site/wwwroot && python -m alembic upgrade head"

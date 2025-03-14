@@ -7,10 +7,10 @@ from uuid import UUID
 from pydantic import BaseModel
 import logging
 
-from database import get_db
-from auth.dependencies import get_current_user
-from schemas.user import User
-from schemas.scene_segment import (
+from app.database import get_db
+from app.auth.dependencies import get_current_user
+from app.schemas.user import User
+from app.schemas.scene_segment import (
     SceneSegment,
     SceneSegmentCreate,
     SceneSegmentUpdate,
@@ -22,13 +22,13 @@ from schemas.scene_segment import (
     BulkCreateSegmentsRequest,
     SegmentListResponse
 )
-from services.scene_segment_service import SceneSegmentService
+from app.services.scene_segment_service import SceneSegmentService
 
-from services.scene_segment_ai_service import SceneSegmentAIService
-from schemas.scene_segment_ai import SceneSegmentGenerationResponse, ScriptSceneGenerationRequestUser, AISceneSegmentGenerationResponse
+from app.services.scene_segment_ai_service import SceneSegmentAIService
+from app.schemas.scene_segment_ai import SceneSegmentGenerationResponse, ScriptSceneGenerationRequestUser, AISceneSegmentGenerationResponse
 
 
-from models import scene_segments
+from app.models import scene_segments
 
 logger = logging.getLogger(__name__)
 

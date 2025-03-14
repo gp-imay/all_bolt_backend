@@ -5,7 +5,7 @@ from enum import Enum
 
 
 
-from schemas.script import ScriptOut
+from app.schemas.script import ScriptOut
 
 class BeatSheetType(str, Enum):
     BLAKE_SNYDER = "Blake Snyder's Beat Sheet (Save the Cat!)"

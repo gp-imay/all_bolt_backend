@@ -5,7 +5,7 @@ from azure.core.exceptions import AzureError
 import logging
 from uuid import UUID
 from typing import Optional
-from config import settings
+from app.config import settings
 import aiohttp
 import asyncio
 

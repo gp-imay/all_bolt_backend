@@ -6,11 +6,11 @@ from uuid import UUID
 import logging
 import traceback
 
-from models.beats import Scene, Beat, SceneGenerationTracker, SceneGenerationStatus, ActEnum
-from models.script import Script
-from schemas.scene import SceneCreate, SceneUpdate, SceneGenerationRequest
-from schemas.scene import SceneResponse, SceneGenerationResult
-from services.openai_service import AzureOpenAIService
+from app.models.beats import Scene, Beat, SceneGenerationTracker, SceneGenerationStatus, ActEnum
+from app.models.script import Script
+from app.schemas.scene import SceneCreate, SceneUpdate, SceneGenerationRequest
+from app.schemas.scene import SceneResponse, SceneGenerationResult
+from app.services.openai_service import AzureOpenAIService
 
 logger = logging.getLogger(__name__)
 

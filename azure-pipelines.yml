@@ -1,0 +1,144 @@
+trigger:
+  branches:
+    include:
+      - main
+      - develop
+  
+variables:
+  # Environment variables
+  # - name: isDev
+  #   value: $[eq(variables['Build.SourceBranch'], 'refs/heads/develop')]
+  - name: isDev
+    value: $[eq(variables['Build.SourceBranch'], 'refs/heads/main')]
+  # - name: serviceConnection
+  #   value: 'your-azure-service-connection'
+  - name: containerRegistry
+    value: 'scriptwriterbackend'
+  - name: imageRepository
+    value: 'script-manager-api'
+  - name: dockerfilePath
+    value: '$(Build.SourcesDirectory)/Dockerfile'
+
+stages:
+- stage: Build
+  displayName: 'Build and Push Docker Image'
+  jobs:
+  - job: BuildImage
+    displayName: 'Build and Push'
+    pool:
+      vmImage: 'ubuntu-latest'
+    steps:
+    - task: Docker@2
+      displayName: 'Build and Push'
+      inputs:
+        containerRegistry: '$(containerRegistry)'
+        repository: '$(imageRepository)'
+        command: 'buildAndPush'
+        Dockerfile: '$(dockerfilePath)'
+        tags: |
+          $(Build.BuildId)
+          $[eq(variables.isDev, true) ? 'dev-latest' : '']
+
+    # Store the build info for manual prod deployments
+    - task: PowerShell@2
+      displayName: 'Create Build Info File'
+      inputs:
+        targetType: 'inline'
+        script: |
+          $buildInfo = @{
+            BuildId = "$(Build.BuildId)"
+            CommitId = "$(Build.SourceVersion)"
+            BuildNumber = "$(Build.BuildNumber)"
+            SourceBranch = "$(Build.SourceBranch)"
+            BuildDate = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss")
+          }
+          $buildInfo | ConvertTo-Json | Set-Content -Path "$(Build.ArtifactStagingDirectory)/buildInfo.json"
+          
+    - task: PublishBuildArtifacts@1
+      displayName: 'Publish Build Information'
+      inputs:
+        PathtoPublish: '$(Build.ArtifactStagingDirectory)'
+        ArtifactName: 'BuildInfo'
+        publishLocation: 'Container'
+
+- stage: DeployToDev
+  displayName: 'Deploy to Development'
+  dependsOn: Build
+  condition: eq(variables.isDev, true)
+  jobs:
+  - deployment: DeployDev
+    displayName: 'Deploy to Dev Environment'
+    environment: 'development'
+    pool:
+      vmImage: 'ubuntu-latest'
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+          - task: AzureWebAppContainer@1
+            displayName: 'Deploy to App Service'
+            inputs:
+              # azureSubscription: '$(serviceConnection)'
+              appName: 'script-manager-api-dev'
+              containers: '$(containerRegistry)/$(imageRepository):$(Build.BuildId)'
+              
+          - task: AzureCLI@2
+            displayName: 'Run Database Migrations'
+            inputs:
+              # azureSubscription: '$(serviceConnection)'
+              scriptType: 'bash'
+              scriptLocation: 'inlineScript'
+              inlineScript: |
+                # Get the Web App's Kudu URL and credentials
+                resourceGroupName=$(az webapp show --name 'script-manager-api-dev' --query resourceGroup -o tsv)
+                publishProfile=$(az webapp deployment list-publishing-profiles --name 'script-manager-api-dev' --resource-group $resourceGroupName --xml)
+                username=$(echo "$publishProfile" | grep -o '<publishProfile[^>]*userName="\([^"]*\)"' | head -1 | grep -o 'userName="\([^"]*\)"' | sed 's/userName="\(.*\)"/\1/')
+                password=$(echo "$publishProfile" | grep -o '<publishProfile[^>]*userPWD="\([^"]*\)"' | head -1 | grep -o 'userPWD="\([^"]*\)"' | sed 's/userPWD="\(.*\)"/\1/')
+                kuduUrl="https://script-manager-api-dev.scm.azurewebsites.net"
+                
+                # Run migrations via Kudu REST API
+                curl -X POST "$kuduUrl/api/command" -u "$username:$password" \
+                  -H "Content-Type: application/json" \
+                  -d '{"command":"cd site/wwwroot && python -m alembic upgrade head", "dir":"site/wwwroot"}'
+
+- stage: DeployToProd
+  displayName: 'Deploy to Production'
+  dependsOn: Build
+  # Only manual trigger for production
+  condition: and(succeeded(), eq(variables.isProd, true))
+  jobs:
+  - deployment: DeployProd
+    displayName: 'Deploy to Production Environment'
+    environment: 'production'
+    pool:
+      vmImage: 'ubuntu-latest'
+    # Requires manual approval before deployment
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+          - task: AzureWebAppContainer@1
+            displayName: 'Deploy to App Service'
+            inputs:
+              # azureSubscription: '$(serviceConnection)'
+              appName: 'script-manager-api-prod'
+              containers: '$(containerRegistry)/$(imageRepository):$(Build.BuildId)'
+              
+          - task: AzureCLI@2
+            displayName: 'Run Database Migrations'
+            inputs:
+              # azureSubscription: '$(serviceConnection)'
+              scriptType: 'bash'
+              scriptLocation: 'inlineScript'
+              inlineScript: |
+                # Get the Web App's Kudu URL and credentials
+                resourceGroupName=$(az webapp show --name 'script-manager-api-prod' --query resourceGroup -o tsv)
+                publishProfile=$(az webapp deployment list-publishing-profiles --name 'script-manager-api-prod' --resource-group $resourceGroupName --xml)
+                username=$(echo "$publishProfile" | grep -o '<publishProfile[^>]*userName="\([^"]*\)"' | head -1 | grep -o 'userName="\([^"]*\)"' | sed 's/userName="\(.*\)"/\1/')
+                password=$(echo "$publishProfile" | grep -o '<publishProfile[^>]*userPWD="\([^"]*\)"' | head -1 | grep -o 'userPWD="\([^"]*\)"' | sed 's/userPWD="\(.*\)"/\1/')
+                kuduUrl="https://script-manager-api-prod.scm.azurewebsites.net"
+                
+                # Run migrations via Kudu REST API
+                curl -X POST "$kuduUrl/api/command" -u "$username:$password" \
+                  -H "Content-Type: application/json" \
+                  -d '{"command":"cd site/wwwroot && python -m alembic upgrade head", "dir":"site/wwwroot"}'

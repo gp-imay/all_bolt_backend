@@ -2,7 +2,7 @@
 from sqlalchemy import Column, String, DateTime, Boolean, JSON
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
-from models.base import UUIDModel
+from app.models.base import UUIDModel
 
 class User(UUIDModel):
     __tablename__ = "users"

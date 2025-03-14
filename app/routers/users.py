@@ -6,12 +6,12 @@ from uuid import UUID
 from jose import JWTError, jwt
 
 
-from config import settings
-from database import get_db
-from schemas.user import UserOut, UserUpdate, UserCreate, Token
-from services.user_service import UserService
-from auth.dependencies import get_current_user, get_current_superuser
-from schemas.script import ScriptList
+from app.config import settings
+from app.schemas.user import UserOut, UserUpdate, UserCreate, Token
+from app.database import get_db
+from app.services.user_service import UserService
+from app.auth.dependencies import get_current_user, get_current_superuser
+from app.schemas.script import ScriptList
 
 router = APIRouter()
 

@@ -2,7 +2,7 @@
 from pydantic import BaseModel, EmailStr, UUID4, Field
 from datetime import datetime
 from typing import Optional, List, Dict, Any
-from schemas.script import Script
+from app.schemas.script import Script
 
 class Token(BaseModel):
     access_token: str

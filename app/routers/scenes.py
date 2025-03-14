@@ -3,10 +3,10 @@ from sqlalchemy.orm import Session
 from typing import List, Optional, Dict, Any
 from uuid import UUID
 
-from database import get_db
-from auth.dependencies import get_current_user
-from schemas.user import User
-from schemas.scene import (
+from app.database import get_db
+from app.auth.dependencies import get_current_user
+from app.schemas.user import User
+from app.schemas.scene import (
     Scene,
     SceneCreate,
     SceneGenerationResponse,
@@ -16,9 +16,9 @@ from schemas.scene import (
     SceneGenerationRequest,
     SceneGenerationResult
 )
-from services.scene_service import SceneService, SceneGenerationService
-from services.openai_service import AzureOpenAIService
-from models.beats import Beat, ActEnum
+from app.services.scene_service import SceneService, SceneGenerationService
+from app.services.openai_service import AzureOpenAIService
+from app.models.beats import Beat, ActEnum
 
 router = APIRouter()
 

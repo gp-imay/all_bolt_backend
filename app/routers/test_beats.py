@@ -2,11 +2,13 @@ import json
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from typing import List, Dict, Optional
-from database import get_db
-from services.openai_service import AzureOpenAIService
-from services.scene_description_service import SceneDescriptionService
-from schemas.scene_segment_ai import AISceneComponent, SceneSegmentGenerationRequest, ComponentType
 from pydantic import BaseModel
+
+from app.database import get_db
+from app.services.openai_service import AzureOpenAIService
+from app.services.scene_description_service import SceneDescriptionService
+from app.schemas.scene_segment_ai import AISceneComponent, SceneSegmentGenerationRequest, ComponentType
+
 from fastapi.responses import StreamingResponse
 import traceback
 import logging

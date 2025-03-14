@@ -9,17 +9,17 @@ import logging
 import traceback
 import json
 
-from models.script import Script, ScriptCreationMethod
-from models.beats import Beat, MasterBeatSheet, ActEnum
-from models.scenes import SceneDescription
-from models.scene_segments import SceneSegment, SceneSegmentComponent, ComponentType
-from schemas.scene_segment_ai import (GeneratedSceneSegment, SceneSegmentGenerationResponse, 
+from app.models.script import Script, ScriptCreationMethod
+from app.models.beats import Beat, MasterBeatSheet, ActEnum
+from app.models.scenes import SceneDescription
+from app.models.scene_segments import SceneSegment, SceneSegmentComponent, ComponentType
+from app.schemas.scene_segment_ai import (GeneratedSceneSegment, SceneSegmentGenerationResponse, 
                                       AISceneComponent, AISceneSegmentGenerationResponse,
                                       AISceneComponentResponse, GeneratedSceneSegmentResponseResponse)
 
 
-from services.openai_service import AzureOpenAIService
-from services.scene_segment_service import SceneSegmentService
+from app.services.openai_service import AzureOpenAIService
+from app.services.scene_segment_service import SceneSegmentService
 
 logger = logging.getLogger(__name__)
 

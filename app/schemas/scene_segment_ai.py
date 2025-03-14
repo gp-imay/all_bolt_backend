@@ -3,7 +3,8 @@
 from pydantic import BaseModel, UUID4, Field
 from typing import List, Optional, Dict, Any
 from enum import Enum
-from schemas.scene_segment import ComponentType  # Import existing enum
+
+from app.schemas.scene_segment import ComponentType  # Import existing enum
 
 class ScriptSceneGenerationRequestUser(BaseModel):
     script_id: UUID4
