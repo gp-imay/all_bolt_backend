@@ -68,7 +68,7 @@ jobs:
   deploy-dev:
     needs: build
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/develop'
+    if: github.ref == 'refs/heads/main'
     environment: development
     steps:
       - name: Azure login
