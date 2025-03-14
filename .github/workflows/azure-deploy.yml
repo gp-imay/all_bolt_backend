@@ -71,6 +71,12 @@ jobs:
     if: github.ref == 'refs/heads/main'
     environment: development
     steps:
+      - name: Download build info
+        uses: actions/download-artifact@v3
+        with:
+          name: build-info
+          path: ./build-info
+
       - name: Azure login
         uses: azure/login@v1
         with:
@@ -82,29 +88,29 @@ jobs:
           app-name: ${{ env.DEV_APP_NAME }}
           images: ${{ env.REGISTRY_NAME }}.azurecr.io/${{ env.IMAGE_NAME }}:${{ github.sha }}
 
-      - name: Run database migrations
-        run: |
-          az webapp ssh --resource-group your-resource-group --name ${{ env.DEV_APP_NAME }} --command "cd site/wwwroot && python -m alembic upgrade head"
+      # - name: Run database migrations
+      #   run: |
+      #     az webapp ssh --resource-group script-manager-rg --name ${{ env.DEV_APP_NAME }} --command "cd site/wwwroot && python -m alembic upgrade head"
 
-  deploy-prod:
-    needs: build
-    runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main'
-    environment:
-      name: production
-      url: https://script-manager-api-prod.azurewebsites.net
-    steps:
-      - name: Azure login
-        uses: azure/login@v1
-        with:
-          creds: ${{ secrets.AZURE_CREDENTIALS }}
+  # deploy-prod:
+  #   needs: build
+  #   runs-on: ubuntu-latest
+  #   if: github.ref == 'refs/heads/main'
+  #   environment:
+  #     name: production
+  #     url: https://script-manager-api-prod.azurewebsites.net
+  #   steps:
+  #     - name: Azure login
+  #       uses: azure/login@v1
+  #       with:
+  #         creds: ${{ secrets.AZURE_CREDENTIALS }}
 
-      - name: Deploy to Azure Web App
-        uses: azure/webapps-deploy@v2
-        with:
-          app-name: ${{ env.PROD_APP_NAME }}
-          images: ${{ env.REGISTRY_NAME }}.azurecr.io/${{ env.IMAGE_NAME }}:${{ github.sha }}
+  #     - name: Deploy to Azure Web App
+  #       uses: azure/webapps-deploy@v2
+  #       with:
+  #         app-name: ${{ env.PROD_APP_NAME }}
+  #         images: ${{ env.REGISTRY_NAME }}.azurecr.io/${{ env.IMAGE_NAME }}:${{ github.sha }}
 
-      - name: Run database migrations
-        run: |
-          az webapp ssh --resource-group your-resource-group --name ${{ env.PROD_APP_NAME }} --command "cd site/wwwroot && python -m alembic upgrade head"
+  #     - name: Run database migrations
+  #       run: |
+  #         az webapp ssh --resource-group script-manager-rg --name ${{ env.PROD_APP_NAME }} --command "cd site/wwwroot && python -m alembic upgrade head"
