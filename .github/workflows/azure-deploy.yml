@@ -36,7 +36,7 @@ jobs:
           if [[ ${{ github.ref }} == 'refs/heads/main' ]]; then
             echo "IS_DEV=true" >> $GITHUB_ENV
             echo "IS_PROD=false" >> $GITHUB_ENV
-          elif [[ ${{ github.ref }} == 'refs/heads/deploy' ]]; then
+          elif [[ ${{ github.ref }} == 'refs/heads/deploy' ]]; then 
             echo "IS_DEV=false" >> $GITHUB_ENV
             echo "IS_PROD=true" >> $GITHUB_ENV
           else
