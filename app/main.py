@@ -124,7 +124,7 @@ app.include_router(
 app.include_router(
     scene_segments.router,
     prefix=f"{settings.API_V1_PREFIX}/scene-segments",
-    tags=["scene-segments"]
+    tags=["scene-segments-and-components"]
 )
 
 if settings.DEBUG:  # Only include test endpoints in debug mode
