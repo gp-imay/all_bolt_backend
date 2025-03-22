@@ -5,6 +5,7 @@ from fastapi import HTTPException, status
 from typing import List, Optional, Dict, Any, Tuple
 from uuid import UUID
 import logging
+import traceback
 
 from app.models.scene_segments import SceneSegment, SceneSegmentComponent, ComponentType
 from app.models.script import Script
@@ -788,4 +789,204 @@ class SceneSegmentService:
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail=f"Error formatting component: {str(e)}"
+            )
+        
+
+    @staticmethod
+    def apply_script_changes(
+        db: Session,
+        script_id: UUID,
+        changed_segments: Dict[str, List[Dict[str, Any]]],
+        deleted_elements: List[str],
+        deleted_segments: List[str]
+    ) -> Dict[str, Any]:
+        """
+        Apply multiple changes to script segments and components in a single transaction.
+        """
+        try:
+            # Verify script exists
+            script = db.query(Script).filter(Script.id == script_id).first()
+            if not script:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Script not found"
+                )
+            
+            updated_count = 0
+            deleted_component_count = 0
+            deleted_segment_count = 0
+            
+            # Process component updates by segment (if any)
+            if changed_segments:
+                for segment_id_str, components in changed_segments.items():
+                    # Skip if no components to update
+                    if not components:
+                        continue
+                        
+                    try:
+                        segment_id = UUID(segment_id_str)
+                    except ValueError:
+                        logger.warning(f"Invalid segment ID format: {segment_id_str}")
+                        continue
+                        
+                    # Verify segment belongs to this script
+                    segment = db.query(SceneSegment).filter(
+                        and_(
+                            SceneSegment.id == segment_id,
+                            SceneSegment.script_id == script_id,
+                            SceneSegment.is_deleted.is_(False)
+                        )
+                    ).first()
+                    
+                    if not segment:
+                        logger.warning(f"Segment not found or does not belong to script: {segment_id}")
+                        continue
+                    
+                    # Process each component change
+                    for comp in components:
+                        try:
+                            # Access fields directly
+                            component_id = comp["id"] if isinstance(comp, dict) else comp.id
+                            component_type = comp["component_type"] if isinstance(comp, dict) else comp.component_type
+                            
+                            # Find the component
+                            db_component = db.query(SceneSegmentComponent).filter(
+                                and_(
+                                    SceneSegmentComponent.id == component_id,
+                                    SceneSegmentComponent.scene_segment_id == segment_id,
+                                    SceneSegmentComponent.is_deleted.is_(False)
+                                )
+                            ).first()
+                            
+                            if not db_component:
+                                logger.warning(f"Component not found: {component_id}")
+                                continue
+                            
+                            # Special handling for PARENTHETICAL component type from frontend
+                            if component_type == "PARENTHETICAL":
+                                # Just update the parenthetical field
+                                content = comp["content"] if isinstance(comp, dict) else comp.content
+                                db_component.parenthetical = content
+                                updated_count += 1
+                                continue
+                            
+                            # Normal field updates based on component type
+                            if component_type in ["HEADING", "ACTION", "DIALOGUE", "CHARACTER", "TRANSITION"]:
+                                # Update component type if different
+                                if db_component.component_type.value != component_type:
+                                    db_component.component_type = component_type
+                                
+                                # Update position if provided
+                                position = comp["position"] if isinstance(comp, dict) else comp.position
+                                if position is not None:
+                                    db_component.position = position
+                                    
+                                # Update content if provided
+                                content = comp["content"] if isinstance(comp, dict) else comp.content
+                                if content is not None:
+                                    db_component.content = content
+                                    
+                                # Update character_name for DIALOGUE or CHARACTER types
+                                if component_type in ["DIALOGUE", "CHARACTER"]:
+                                    character_name = comp.get("character_name") if isinstance(comp, dict) else getattr(comp, "character_name", None)
+                                    if character_name is not None:
+                                        db_component.character_name = character_name
+                                
+                                # Update parenthetical for DIALOGUE type
+                                if component_type == "DIALOGUE":
+                                    parenthetical = comp.get("parenthetical") if isinstance(comp, dict) else getattr(comp, "parenthetical", None)
+                                    if parenthetical is not None:
+                                        db_component.parenthetical = parenthetical
+                            
+                            updated_count += 1
+                            
+                        except Exception as comp_error:
+                            logger.error(f"Error updating component: {str(comp_error)}")
+                            logger.error(traceback.format_exc())
+                            continue
+            
+            # Process component deletions (if any)
+            if deleted_elements:
+                for component_id_str in deleted_elements:
+                    try:
+                        component_id = UUID(component_id_str)
+                    except ValueError:
+                        logger.warning(f"Invalid component ID format: {component_id_str}")
+                        continue
+                        
+                    # Find the component and verify it belongs to this script
+                    component = db.query(SceneSegmentComponent).join(
+                        SceneSegment, SceneSegmentComponent.scene_segment_id == SceneSegment.id
+                    ).filter(
+                        and_(
+                            SceneSegmentComponent.id == component_id,
+                            SceneSegment.script_id == script_id,
+                            SceneSegmentComponent.is_deleted.is_(False)
+                        )
+                    ).first()
+                    
+                    if not component:
+                        logger.warning(f"Component not found or does not belong to script: {component_id}")
+                        continue
+                    
+                    # Soft delete the component
+                    component.soft_delete()
+                    deleted_component_count += 1
+
+            # Process segment deletions (if any)
+            if deleted_segments:
+                for segment_id_str in deleted_segments:
+                    try:
+                        segment_id = UUID(segment_id_str)
+                    except ValueError:
+                        logger.warning(f"Invalid segment ID format: {segment_id_str}")
+                        continue
+                    
+                    # Find the segment and verify it belongs to this script
+                    segment = db.query(SceneSegment).filter(
+                        and_(
+                            SceneSegment.id == segment_id,
+                            SceneSegment.script_id == script_id,
+                            SceneSegment.is_deleted.is_(False)
+                        )
+                    ).first()
+                    
+                    if not segment:
+                        logger.warning(f"Segment not found or does not belong to script: {segment_id}")
+                        continue
+                    
+                    # Soft delete the segment
+                    segment.soft_delete()
+                    
+                    # Also soft delete all components in the segment
+                    components = db.query(SceneSegmentComponent).filter(
+                        and_(
+                            SceneSegmentComponent.scene_segment_id == segment_id,
+                            SceneSegmentComponent.is_deleted.is_(False)
+                        )
+                    ).all()
+                    
+                    for component in components:
+                        component.soft_delete()
+                    
+                    deleted_segment_count += 1
+            
+            # Commit all changes in a single transaction
+            db.commit()
+            
+            return {
+                "success": True,
+                "message": "Script changes applied successfully",
+                "updated_components": updated_count,
+                "deleted_components": deleted_component_count,
+                "deleted_segments": deleted_segment_count
+            }
+            
+        except Exception as e:
+            db.rollback()
+            logger.error(f"Error applying script changes: {str(e)}")
+            logger.error(traceback.format_exc())
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Failed to apply script changes: {str(e)}"
             )

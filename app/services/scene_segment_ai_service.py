@@ -8,6 +8,7 @@ from uuid import UUID
 import logging
 import traceback
 import json
+import math
 
 from app.models.script import Script, ScriptCreationMethod
 from app.models.beats import Beat, MasterBeatSheet, ActEnum
@@ -20,6 +21,7 @@ from app.schemas.scene_segment_ai import (GeneratedSceneSegment, SceneSegmentGen
 
 from app.services.openai_service import AzureOpenAIService
 from app.services.scene_segment_service import SceneSegmentService
+from app.services.scene_description_service import SceneDescriptionService
 
 logger = logging.getLogger(__name__)
 
@@ -46,35 +48,109 @@ class SceneSegmentAIService:
                 fountain_text += f"{comp.content}\n\n"
         return fountain_text
     
-    def find_next_scene_without_segment(self, db: Session, script_id: UUID) -> Optional[SceneDescription]:
+    async def ensure_scene_descriptions_exist(self, db, script_id, user_id):
+        """
+        Ensures scene descriptions exist for the script by checking each beat in order.
+        If a beat without scene descriptions is found, generates descriptions for that beat.
+        
+        Args:
+            db: Database session
+            script_id: UUID of the script
+            user_id: UUID of the requesting user
+            
+        Returns:
+            tuple: (found_or_created_descriptions, new_description_generated, error_message or None)
+        """
+        # Get all beats for this script in position order
+        beats = db.query(Beat).filter(
+            Beat.script_id == script_id,
+            Beat.is_deleted.is_(False)
+        ).order_by(Beat.position).all()
+        
+        if not beats:
+            return False, False, "No beats found for this script"
+        
+        # Check each beat in order
+        for beat in beats:
+            # Check if this beat has any scene descriptions
+            has_descriptions = db.query(exists().where(
+                and_(
+                    SceneDescription.beat_id == beat.id,
+                    SceneDescription.is_deleted.is_(False)
+                )
+            )).scalar()
+            
+            if not has_descriptions:
+                # Found a beat without scene descriptions - generate them
+                scene_description_service = SceneDescriptionService()
+                try:
+                    result = await scene_description_service.generate_scene_description_for_beat(
+                        db=db,
+                        beat_id=beat.id,
+                        user_id=user_id
+                    )
+                    return True, True, None  # Successfully generated new scene descriptions
+                except Exception as e:
+                    error_message = f"Failed to generate scene descriptions for beat {beat.id}: {str(e)}"
+                    logger.error(error_message)
+                    logger.error(traceback.format_exc())
+                    return False, False, error_message
+        
+        # If we get here, all beats already have scene descriptions
+        return True, False, None
+    
+    def find_next_scene_without_segment(self, db: Session, script_id: UUID) -> Tuple[Optional[SceneDescription], bool]:
         """
         Find the next scene description that doesn't have a segment generated yet.
         Processes beats in order of position, then scenes within each beat by position.
+        
+        Returns:
+            Tuple containing:
+            - The next scene description without a segment (or None if not found)
+            - A boolean indicating whether any scene descriptions exist for this script
         """
-        # Subquery to find scene descriptions that already have segments
-        scene_descriptions_with_segments = (
-            db.query(SceneSegment.scene_description_id)
-            .filter(
-                SceneSegment.script_id == script_id,
-                SceneSegment.is_deleted.is_(False)
+        # First check if any scene descriptions exist for this script
+        scene_descriptions_exist = db.query(exists().where(
+            SceneDescription.beat_id.in_(
+                db.query(Beat.id).filter(Beat.script_id == script_id)
             )
-            .subquery()
-        )
+        )).scalar()
+        # If no scene descriptions exist at all, return None and False
+        if not scene_descriptions_exist:
+            return None, False
+        
+        # Subquery to find scene descriptions that already have segments
+        # scene_descriptions_with_segments = (
+        #     db.query(SceneSegment.scene_description_id)
+        #     .filter(
+        #         SceneSegment.script_id == script_id,
+        #         SceneSegment.is_deleted.is_(False)
+        #     )
+        #     .scalar_subquery()  # Fixed the SQLAlchemy warning
+        # )
         
         # Find scene descriptions without segments, ordered by beat position then scene position
         next_scene = (
             db.query(SceneDescription)
             .join(Beat, SceneDescription.beat_id == Beat.id)
+            .outerjoin(
+                SceneSegment, 
+                and_(
+                    SceneSegment.scene_description_id == SceneDescription.id,
+                    SceneSegment.is_deleted.is_(False)
+                )
+            )
             .filter(
                 Beat.script_id == script_id,
                 SceneDescription.is_deleted.is_(False),
-                not_(SceneDescription.id.in_(scene_descriptions_with_segments))
+                SceneSegment.id.is_(None)  # Only include scenes with no segments
             )
             .order_by(Beat.position, SceneDescription.position)
             .first()
         )
         
-        return next_scene
+        # Return the next scene and True (indicating scenes exist)
+        return next_scene, True
         
     async def generate_next_segment(
         self,
@@ -104,17 +180,32 @@ class SceneSegmentAIService:
                 detail="Only scripts created with AI support scene generation"
             )
         
+        descriptions_exist, newly_generated, error = await self.ensure_scene_descriptions_exist(db, script_id, user_id)
+        if error:
+            return AISceneSegmentGenerationResponse(
+                success=False,
+                creation_method=script.creation_method.value,
+                message=error
+            )
         # Find the next scene without a segment
-        next_scene = self.find_next_scene_without_segment(db, script_id)
+        next_scene, scenes_exist = self.find_next_scene_without_segment(db, script_id)
+        # Handle different cases
+        if not scenes_exist:
+            return AISceneSegmentGenerationResponse(
+                success=False,
+                creation_method=script.creation_method.value,
+                message="No scene descriptions found for this script. Please generate scene descriptions first.",
+                error="No scene descriptions exist"
+            )
         
         if not next_scene:
             return AISceneSegmentGenerationResponse(
                 success=False,
                 creation_method=script.creation_method.value,
-                message="All scenes already have segments generated"
+                message="All scenes already have segments generated",
+                error="All scenes have segments"
             )
 
-        
         # Get beat information
         beat = db.query(Beat).filter(Beat.id == next_scene.beat_id).first()
         if not beat:
@@ -160,9 +251,9 @@ class SceneSegmentAIService:
         )
         
         min_word_count = 800  # Default value if not found
-        if beat_template and "word_count_maximum" in beat_template:
-            min_word_count = beat_template["word_count_maximum"]
-
+        if beat_template and "word_count_maximum" in beat_template and "number_of_scenes" in beat_template:
+            min_word_count = math.ceil(beat_template["word_count_maximum"]/ beat_template["number_of_scenes"])
+        
         # Get previous scenes for context
         previous_scenes = [
             scene.scene_heading 
@@ -223,7 +314,7 @@ class SceneSegmentAIService:
             
             # Create components for creation
             import uuid
-            from schemas.scene_segment import ComponentCreate
+            from app.schemas.scene_segment import ComponentCreate
             component_models = []
             for comp in generated_segment.components:
                 component_data = {
@@ -242,7 +333,7 @@ class SceneSegmentAIService:
                 component_models.append(component_create)
             
             # Create segment
-            from schemas.scene_segment import SceneSegmentCreate
+            from app.schemas.scene_segment import SceneSegmentCreate
             segment_create = SceneSegmentCreate(
                 script_id=script.id,
                 beat_id=beat.id,
@@ -322,13 +413,23 @@ class SceneSegmentAIService:
         ).first()
         
         if not script:
-            return SceneSegmentGenerationResponse(
+            return AISceneSegmentGenerationResponse(
                 success=False,
                 creation_method="UNKNOWN",
                 message="Script not found or unauthorized access",
                 error="Script not found"
             )
         
+        # Ensure scene descriptions exist
+        descriptions_exist, newly_generated, error = await self.ensure_scene_descriptions_exist(db, script_id, user_id)
+
+        if error:
+            return AISceneSegmentGenerationResponse(
+                success=False,
+                creation_method=script.creation_method.value,
+                message=error
+            )
+
         # Check if script has any existing scene segments
         existing_segment = db.query(SceneSegment).filter(
             SceneSegment.script_id == script_id,
@@ -372,6 +473,60 @@ class SceneSegmentAIService:
                 message="Found existing first scene segment"
             )
         else:
+            # Check if any scene descriptions exist before trying to generate
+            scene_desc_exists = db.query(exists().where(
+                SceneDescription.beat_id.in_(
+                    db.query(Beat.id).filter(Beat.script_id == script_id)
+                )
+            )).scalar()
+            
+            if not scene_desc_exists:
+                # No scene descriptions exist yet - let's generate them first
+                
+                try:
+                    # Find beats for this script that need scene descriptions
+                    beats = db.query(Beat).filter(
+                        Beat.script_id == script_id,
+                        or_(Beat.is_deleted.is_(False), Beat.is_deleted.is_(None))
+                    ).order_by(Beat.position).all()
+                    
+                    if not beats:
+                        return AISceneSegmentGenerationResponse(
+                            success=False,
+                            input_context={
+                                "script_id": str(script.id),
+                                "script_title": script.title
+                            },
+                            creation_method=script.creation_method.value,
+                            message="No beats found for this script. Please create beats first.",
+                            error="No beats exist"
+                        )
+                    
+                    # Generate scene descriptions for the first beat
+                    scene_description_service = SceneDescriptionService()
+                    generation_result = await scene_description_service.generate_scene_description_for_beat(
+                        db=db,
+                        beat_id=beats[0].id,
+                        user_id=user_id
+                    )
+                    
+                    # Log the result of scene description generation
+                    logger.info(f"Generated scene descriptions for beat {beats[0].id}")
+                    
+                    # Now we should have scene descriptions, so continue with segment generation
+                except Exception as e:
+                    logger.error(f"Failed to generate scene descriptions: {str(e)}")
+                    return AISceneSegmentGenerationResponse(
+                        success=False,
+                        input_context={
+                            "script_id": str(script.id),
+                            "script_title": script.title
+                        },
+                        creation_method=script.creation_method.value,
+                        message=f"Failed to automatically generate scene descriptions: {str(e)}",
+                        error="Scene description generation failed"
+                    )
+                
             # No existing segment, generate a new one
             return await self.generate_next_segment(
                 db=db,

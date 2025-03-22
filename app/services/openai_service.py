@@ -406,7 +406,7 @@ class AzureOpenAIService:
         - Contains at least {min_word_count} words total
         - Advances the story while developing characters
         - Is consistent with the beat's purpose in the overall story arc
-        - Is consistent with the scene's title and descriiption
+        - Is consistent with the scene's title and description
         """
 
         user_prompt = f"""Write a screenplay scene based on the following context:

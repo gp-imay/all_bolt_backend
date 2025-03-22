@@ -19,6 +19,7 @@ from app.services.azure_service import AzureStorageService
 from app.auth.dependencies import get_current_user
 from app.schemas.user import User
 from app.schemas.beat import ScriptWithBeatsResponse
+import time
 
 router = APIRouter()
 
@@ -59,10 +60,12 @@ async def list_scripts(
         val["id"] = resp.id
         val["name"] = resp.title
         val["genre"] = resp.genre
-        
+        val["creation_method"] = resp.creation_method
+
         val["created_at"] = resp.created_at
         val["user_id"] = resp.user_id
         response_formatted.append(val)
+    print("Scripts")
     return response_formatted
 
 @router.get("/{script_id}", response_model=ScriptOut)

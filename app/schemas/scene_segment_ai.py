@@ -82,3 +82,11 @@ class SceneSegmentGenerationResponse(BaseModel):
     scene_segment_id: Optional[UUID4] = None
     creation_method: str
     message: str
+
+class ComponentCreate(BaseModel):
+    component_type: ComponentTypeAI
+    position: float
+    content: str
+    character_name: Optional[str] = None
+    parenthetical: Optional[str] = None
+    # id : UUID4

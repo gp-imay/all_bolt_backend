@@ -1,6 +1,6 @@
 # app/schemas/scene_segment.py
 from pydantic import BaseModel, UUID4, Field, validator
-from typing import List, Optional, Union
+from typing import List, Optional, Dict
 from datetime import datetime
 from enum import Enum
 
@@ -107,3 +107,36 @@ class BulkCreateSegmentsRequest(BaseModel):
 class SegmentListResponse(BaseModel):
     segments: List[SceneSegment]
     total: int
+
+
+#### For Script Edits
+
+### Writing the below component type class for just FE integration
+### FE sends parenthetical as one of component type so it is expected to accept parenthetical in request body
+class ComponentTypeFE(str, Enum):
+    HEADING = "HEADING"
+    ACTION = "ACTION"
+    DIALOGUE = "DIALOGUE"
+    CHARACTER = "CHARACTER"
+    TRANSITION = "TRANSITION"
+    PARENTHETICAL = "PARENTHETICAL"
+
+class ComponentChange(BaseModel):
+    id: UUID4
+    component_type: ComponentTypeFE
+    position: float
+    content: str
+    character_name: Optional[str] = None
+    parenthetical: Optional[str] = None
+
+class ScriptChangesRequest(BaseModel):
+    changedSegments: Dict[str, List[ComponentChange]]
+    deletedElements: List[str] = []  # Component IDs to delete
+    deletedSegments: List[str] = []  # Segment IDs to delete
+
+
+class ScriptChangesResponse(BaseModel):
+    success: bool
+    message: str
+    updated_components: int
+    deleted_components: int

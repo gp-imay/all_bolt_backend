@@ -84,6 +84,7 @@ class ScriptList(BaseModel):
     genre: str
     progress: int
     created_at: datetime
+    creation_method: ScriptCreationMethod
     user_id: UUID4
     class Config:
         from_attributes = True

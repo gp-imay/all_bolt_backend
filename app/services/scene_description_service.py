@@ -193,6 +193,7 @@ class SceneDescriptionService:
             beat, script, beat_template, previous_scenes = self.get_beat_generation_context(
                 db, beat_id, user_id
             )
+
             
             # Get number of scenes from template
             num_scenes = beat_template.get('number_of_scenes', 4)

@@ -17,21 +17,141 @@ INSERT INTO master_beat_sheets (
     15,
     '{
   "beats": [
-    {"name": "Opening Image", "description": "Sets up the tone and initial world of the story", "position": 1, "number_of_scenes": 4},
-    {"name": "Theme Stated", "description": "The message or lesson of the story is hinted at", "position": 2, "number_of_scenes": 4},
-    {"name": "Set-Up", "description": "Introduces main characters and their world before the change", "position": 3, "number_of_scenes": 4},
-    {"name": "Catalyst", "description": "The inciting incident that sets the story in motion", "position": 4, "number_of_scenes": 4},
-    {"name": "Debate", "description": "The protagonist wrestles with the call to action", "position": 5, "number_of_scenes": 4},
-    {"name": "Break into Two", "description": "The protagonist makes a choice and enters the new world", "position": 6, "number_of_scenes": 4},
-    {"name": "B Story", "description": "A secondary story or relationship that often carries the theme", "position": 7, "number_of_scenes": 4},
-    {"name": "Fun and Games", "description": "The promise of the premise is explored", "position": 8, "number_of_scenes": 4},
-    {"name": "Midpoint", "description": "A major turning point that raises the stakes", "position": 9, "number_of_scenes": 4},
-    {"name": "Bad Guys Close In", "description": "External and internal pressures intensify", "position": 10, "number_of_scenes": 4},
-    {"name": "All Is Lost", "description": "The protagonist hits rock bottom", "position": 11, "number_of_scenes": 4},
-    {"name": "Dark Night of the Soul", "description": "The protagonist''s lowest moment", "position": 12, "number_of_scenes": 4},
-    {"name": "Break into Three", "description": "The protagonist finds the solution", "position": 13, "number_of_scenes": 4},
-    {"name": "Finale", "description": "The protagonist proves they''ve changed and succeeds", "position": 14, "number_of_scenes": 4},
-    {"name": "Final Image", "description": "Shows how much the world has changed from the opening", "position": 15, "number_of_scenes": 4}
+    {
+      "name": "Opening Image",
+      "position": 1,
+      "description": "Sets up the tone and initial world of the story",
+      "number_of_scenes": 1,
+      "page_count": 2,
+      "word_count_minimum": 200,
+      "word_count_maximum": 500
+    },
+    {
+      "name": "Theme Stated",
+      "position": 2,
+      "description": "The message or lesson of the story is hinted at",
+      "number_of_scenes": 2,
+      "page_count": 4,
+      "word_count_minimum": 600,
+      "word_count_maximum": 800
+    },
+    {
+      "name": "Set-Up",
+      "position": 3,
+      "description": "Introduces main characters and their world before the change",
+      "number_of_scenes": 4,
+      "page_count": 10,
+      "word_count_minimum": 2000,
+      "word_count_maximum": 3000
+    },
+    {
+      "name": "Catalyst",
+      "position": 4,
+      "description": "The inciting incident that sets the story in motion",
+      "number_of_scenes": 3,
+      "page_count": 4,
+      "word_count_minimum": 600,
+      "word_count_maximum": 800
+    },
+    {
+      "name": "Debate",
+      "position": 5,
+      "description": "The protagonist wrestles with the call to action",
+      "number_of_scenes": 4,
+      "page_count": 6,
+      "word_count_minimum": 1000,
+      "word_count_maximum": 1600
+    },
+    {
+      "name": "Break into Two",
+      "position": 6,
+      "description": "The protagonist makes a choice and enters the new world",
+      "number_of_scenes": 2,
+      "page_count": 4,
+      "word_count_minimum": 600,
+      "word_count_maximum": 800
+    },
+    {
+      "name": "B Story",
+      "position": 7,
+      "description": "A secondary story or relationship that often carries the theme",
+      "number_of_scenes": 4,
+      "page_count": 4,
+      "word_count_minimum": 600,
+      "word_count_maximum": 800
+    },
+    {
+      "name": "Fun and Games",
+      "position": 8,
+      "description": "The promise of the premise is explored",
+      "number_of_scenes": 12,
+      "page_count": 20,
+      "word_count_minimum": 4000,
+      "word_count_maximum": 6000
+    },
+    {
+      "name": "Midpoint",
+      "position": 9,
+      "description": "A major turning point that raises the stakes",
+      "number_of_scenes": 2,
+      "page_count": 4,
+      "word_count_minimum": 700,
+      "word_count_maximum": 1000
+    },
+    {
+      "name": "Bad Guys Close In",
+      "position": 10,
+      "description": "External and internal pressures intensify",
+      "number_of_scenes": 5,
+      "page_count": 12,
+      "word_count_minimum": 2000,
+      "word_count_maximum": 3000
+    },
+    {
+      "name": "All Is Lost",
+      "position": 11,
+      "description": "The protagonist hits rock bottom",
+      "number_of_scenes": 2,
+      "page_count": 4,
+      "word_count_minimum": 600,
+      "word_count_maximum": 800
+    },
+    {
+      "name": "Dark Night of the Soul",
+      "position": 12,
+      "description": "The protagonist\'s lowest moment",
+      "number_of_scenes": 3,
+      "page_count": 4,
+      "word_count_minimum": 500,
+      "word_count_maximum": 700
+    },
+    {
+      "name": "Break into Three",
+      "position": 13,
+      "description": "The protagonist finds the solution",
+      "number_of_scenes": 2,
+      "page_count": 4,
+      "word_count_minimum": 600,
+      "word_count_maximum": 800
+    },
+    {
+      "name": "Finale",
+      "position": 14,
+      "description": "The protagonist proves they\'ve changed and succeeds",
+      "number_of_scenes": 8,
+      "page_count": 16,
+      "word_count_minimum": 3000,
+      "word_count_maximum": 6000
+    },
+    {
+      "name": "Final Image",
+      "position": 15,
+      "description": "Shows how much the world has changed from the opening",
+      "number_of_scenes": 1,
+      "page_count": 2,
+      "word_count_minimum": 200,
+      "word_count_maximum": 500
+    }
   ]
 }'::jsonb,
     NOW()

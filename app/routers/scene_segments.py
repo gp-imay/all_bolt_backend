@@ -20,9 +20,12 @@ from app.schemas.scene_segment import (
     ReorderComponentRequest,
     ReorderSegmentRequest,
     BulkCreateSegmentsRequest,
-    SegmentListResponse
+    SegmentListResponse,
+    ScriptChangesResponse,
+    ScriptChangesRequest
 )
 from app.services.scene_segment_service import SceneSegmentService
+from app.services.script_service import ScriptService
 
 from app.services.scene_segment_ai_service import SceneSegmentAIService
 from app.schemas.scene_segment_ai import SceneSegmentGenerationResponse, ScriptSceneGenerationRequestUser, AISceneSegmentGenerationResponse
@@ -356,3 +359,33 @@ async def get_or_generate_first_segment(
         script_id=request.script_id,
         user_id=current_user.id
     )
+
+
+@router.put("/{script_id}/changes", response_model=ScriptChangesResponse)
+async def update_script_changes(
+    script_id: UUID,
+    changes: ScriptChangesRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Apply multiple changes to script segments and components in a single operation.
+    """
+    # Verify script exists and belongs to user
+    existing_script = ScriptService.get_script(db=db, script_id=script_id)
+    if existing_script.user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not authorized to modify this script"
+        )
+    
+    # Process the changes
+    result = SceneSegmentService.apply_script_changes(
+        db=db,
+        script_id=script_id,
+        changed_segments=changes.changedSegments,
+        deleted_elements=changes.deletedElements,
+        deleted_segments=changes.deletedSegments
+    )
+    
+    return result
