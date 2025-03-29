@@ -407,6 +407,25 @@ class AzureOpenAIService:
         - Advances the story while developing characters
         - Is consistent with the beat's purpose in the overall story arc
         - Is consistent with the scene's title and description
+
+        STRICTLY PROHIBITED CONTENT:
+        1. Technical/markdown formatting like ```, **bold**, or ANY code blocks
+        2. Placeholder text (e.g., END, COMPLETION, FINAL, TEMPLATE_PLACEHOLDER)
+        3. Underscore_phrases or hyphenated-special-terms
+        4. Run-on CAPITALIZED words (e.g., FINALENDSCENE)
+        5. Non-screenplay vocabulary (e.g., "Completion", "Pipeline", "Module")
+
+        EXAMPLES OF BAD OUTPUT:
+        - ENDENDEND DINING ROOM - NIGHT
+        - (completion_state = "finished")
+        - CHARACTER_NAME_WITH_UNDERSCORE
+        - "We need to FINALIZE_IMPLEMENTATION!"
+
+        ALWAYS USE:
+        - Standard screenplay formatting
+        - Proper punctuation
+        - Natural dialogue
+        - Scene-appropriate vocabulary
         """
 
         user_prompt = f"""Write a screenplay scene based on the following context:
@@ -445,8 +464,11 @@ class AzureOpenAIService:
                 response_model=GeneratedSceneSegment,
                 max_tokens=settings.AZURE_OPENAI_MAX_TOKENS,
                 temperature=settings.AZURE_OPENAI_TEMPERATURE,
+                top_p=settings.AZURE_TOP_P,        # Focus on high-probability words
+                presence_penalty=settings.AZURE_PRESENCE_PENALTY,  # Discourage repetitive phrases
+                frequency_penalty=settings.AZURE_FREQUENCY_PENALTY,  # Discourage word repetition
+                seed=settings.AZURE_SEED
             )
-            
             return response
 
         except Exception as e:

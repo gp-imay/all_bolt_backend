@@ -66,6 +66,10 @@ class Settings(BaseSettings):
     AZURE_OPENAI_DEPLOYMENT_NAME: str
     AZURE_OPENAI_MAX_TOKENS: int = 65000
     AZURE_OPENAI_TEMPERATURE: float = 1
+    AZURE_TOP_P: float = 0.9
+    AZURE_PRESENCE_PENALTY: float = 0.3
+    AZURE_FREQUENCY_PENALTY: float = 0.2
+    AZURE_SEED: int = 53
 
     DEBUG: bool = False
     ENVIRONMENT: str = "development"  # Can be "development", "staging", "production"

@@ -2,9 +2,12 @@
 import uuid
 from sqlalchemy import Column
 from sqlalchemy.dialects.postgresql import UUID
-from app.database import Base
+
 from sqlalchemy import  DateTime, Boolean
 from sqlalchemy.sql import func
+
+from app.database import Base
+
 
 class UUIDModel(Base):
     __abstract__ = True

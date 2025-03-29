@@ -1,6 +1,6 @@
 # app/services/script_service.py
 from sqlalchemy.orm import Session
-from sqlalchemy import desc
+from sqlalchemy import desc, and_
 from fastapi import HTTPException, status
 from typing import List, Optional
 from uuid import UUID
@@ -37,7 +37,8 @@ class ScriptService:
         """
         Get a specific script by ID
         """
-        script = db.query(Script).filter(Script.id == script_id).first()
+        script = db.query(Script).filter( and_(Script.id == script_id,
+                                               Script.is_deleted.is_(False))).first()
         if not script:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -56,7 +57,12 @@ class ScriptService:
         """
         Get all scripts with optional filtering
         """
-        query = db.query(Script).filter(Script.user_id == user_id)
+        query = db.query(Script).filter(
+            and_(
+                Script.user_id == user_id,
+                Script.is_deleted.is_(False)
+            )
+        )
         
         if genre:
             query = query.filter(Script.genre == genre)
@@ -85,10 +91,13 @@ class ScriptService:
     @staticmethod
     def delete_script(db: Session, script_id: UUID):
         """
-        Delete a script
+        Soft delete a script
         """
         script = ScriptService.get_script(db, script_id)
-        db.delete(script)
+        
+        # Use the soft_delete method provided by SoftDeleteMixin
+        script.soft_delete()
+        
         db.commit()
         return True
 
@@ -103,7 +112,12 @@ class ScriptService:
         Get all scripts for a specific user
         """
         return db.query(Script)\
-            .filter(Script.user_id == user_id)\
+            .filter(
+                and_(
+                    Script.user_id == user_id,
+                    Script.is_deleted.is_(False)
+                )
+            )\
             .order_by(desc(Script.created_at))\
             .offset(skip)\
             .limit(limit)\
