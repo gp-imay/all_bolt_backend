@@ -1,5 +1,5 @@
 # app/models/scene_segment.py
-from sqlalchemy import Column, String, DateTime, ForeignKey, Text, Float, Boolean, Enum
+from sqlalchemy import Column, String, DateTime, ForeignKey, Text, Float, Boolean, Enum, UniqueConstraint
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from sqlalchemy.dialects.postgresql import UUID
@@ -65,8 +65,51 @@ class SceneSegmentComponent(UUIDModel, SoftDeleteMixin):
     
     # Relationships
     scene_segment = relationship("SceneSegment", back_populates="components")
+    shortening_alternatives = relationship("ShorteningAlternative", back_populates="component", cascade="all, delete-orphan")
+
 
     __table_args__ = (
         # Ensure unique ordering within a segment (for non-deleted components)
         # This is implemented using a partial index in PostgreSQL
     )
+
+
+class ShorteningAlternative(UUIDModel, SoftDeleteMixin):
+    """
+    Stores AI-generated shortening alternatives for a component.
+    """
+    __tablename__ = "shortening_alternatives"
+
+    component_id = Column(UUID(as_uuid=True), ForeignKey("scene_segment_components.id", ondelete="CASCADE"), nullable=False)
+    alternative_type = Column(Text, nullable=True)
+    shortened_text = Column(Text, nullable=False)
+    explanation = Column(Text, nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    
+    # Relationship
+    component = relationship("SceneSegmentComponent", back_populates="shortening_alternatives")
+    
+    __table_args__ = (
+        UniqueConstraint('component_id', 'alternative_type', name='unique_alternative_type_per_component'),
+    )
+
+
+class ShorteningSelectionHistory(UUIDModel):
+    """
+    Records each time a user selects and applies a shortening alternative.
+    Provides analytics data on which alternative types are preferred.
+    """
+    __tablename__ = "shortening_selection_history"
+
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    component_id = Column(UUID(as_uuid=True), ForeignKey("scene_segment_components.id", ondelete="CASCADE"), nullable=False)
+    alternative_id = Column(UUID(as_uuid=True), ForeignKey("shortening_alternatives.id", ondelete="CASCADE"), nullable=False)
+    alternative_type = Column(Text, nullable=False)
+    selected_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False, index=True)
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    
+    # Relationships
+    user = relationship("User")
+    component = relationship("SceneSegmentComponent")
+    alternative = relationship("ShorteningAlternative")

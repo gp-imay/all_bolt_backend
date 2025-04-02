@@ -3,7 +3,7 @@ import json
 import logging
 from enum import Enum
 from typing import List, Generator, Dict, Any, Optional
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from instructor import from_openai, Mode
 from openai import AzureOpenAI
 from app.config import settings
@@ -48,6 +48,19 @@ class GeneratedScene(BaseModel):
     scene_heading: str
     scene_description: str
     position: int
+
+class ScriptRewrite(BaseModel):
+    shortened_text: str = Field(..., description="Concise version of the script segment")
+    explanation: str = Field(..., description="How the script was refined for brevity and impact")
+
+
+class ScriptShortenerResponse(BaseModel):
+    concise: ScriptRewrite = Field(..., description="A shorter, more to-the-point version of the script segment")
+    dramatic: ScriptRewrite = Field(..., description="A shortened version with heightened drama and impact")
+    minimal: ScriptRewrite = Field(..., description="A stripped-down version using the fewest words possible")
+    poetic: ScriptRewrite = Field(..., description="A concise yet more lyrical and visually rich version")
+    punchy: ScriptRewrite = Field(..., description="A shorter version with snappy, high-energy phrasing")
+
 
 
 class AzureOpenAIService:
@@ -474,4 +487,121 @@ class AzureOpenAIService:
         except Exception as e:
             logger.error(f"Scene segment generation failed: {str(e)}")
             logger.error(traceback.format_exc())
+            raise
+
+
+    def shorten_action_component(self, text: str, context: dict) -> ScriptShortenerResponse:
+        """
+        Shorten an action component with themed alternatives.
+        """
+        genre = context.get("genre", "")
+        script_title = context.get("script_title", "")
+        
+        system_prompt = """
+        You are a professional script editor with expertise in action line optimization for screenplays. Your task is to condense and refine action blocks while preserving essential narrative elements.
+
+        Task: Create FIVE distinct themed versions of the provided action text, each with a different style but all maintaining the essential visual elements and narrative purpose.
+
+        Create these specific themed versions:
+        1. CONCISE: A shorter, more to-the-point version focusing on clarity
+        2. DRAMATIC: A shortened version with heightened tension and impact
+        3. MINIMAL: A stripped-down version using the fewest words possible
+        4. POETIC: A concise yet more lyrical and visually rich version
+        5. PUNCHY: A shorter version with snappy, high-energy phrasing
+        """
+        
+        user_prompt = f"""
+        Script: {script_title}
+        Genre: {genre}
+        
+        Original action description:
+        "{text}"
+        
+        Create five distinct themed shortened alternatives as specified, each with a brief explanation of your approach.
+        Each version should be shorter than the original while preserving the essential narrative elements.
+        """
+        
+        try:
+            # Use instructor with your schema
+            response = self.client.chat.completions.create(
+                model=self.deployment_name,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt}
+                ],
+                response_model=ScriptShortenerResponse,
+                temperature=settings.AZURE_OPENAI_TEMPERATURE
+            )
+            
+            return response
+        
+        except Exception as e:
+            logger.error(f"Error shortening action component: {str(e)}")
+            raise
+
+    def shorten_dialogue_component(self, text: str, character_name: str, context: dict) -> ScriptShortenerResponse:
+        """
+        Shorten a dialogue component with themed alternatives.
+        """
+        genre = context.get("genre", "")
+        script_title = context.get("script_title", "")
+        parenthetical = context.get("parenthetical", "")
+        
+        system_prompt = """
+        You are a dialogue specialist with expertise in script editing and emotional storytelling. Your task is to distill dialogue to its essential emotional core while preserving the character's unique voice, motivations, and any crucial revelations.
+
+        Situation: You are working with a script excerpt that needs to be condensed while maintaining its dramatic impact and character integrity.
+
+        Task: Analyze and shorten the provided dialogue from a the given genre script for the character, removing unnecessary elements while preserving the emotional essence and narrative purpose of the lines.
+
+        Objective: Create more impactful, concise dialogue that maintains the character's voice and the scene's emotional weight, making the script tighter and more effective without losing important character moments or plot points.
+
+        When editing dialogue:
+        - Eliminate all stammering, hesitations, and filler words (such as "um," "uh," "you know," "like," etc.)
+        - Remove redundant phrases and repetitive statements
+        - Merge overlapping or connected thoughts into single, powerful lines
+        - Consider the adjacent action/parenthetical context to ensure your edits align with the character's emotional state
+        - Preserve distinctive speech patterns that define the character's voice
+        - Retain all plot-critical information and emotional revelations
+        - Maintain the character's specific motivations and intentions
+        - Ensure the shortened dialogue flows naturally with what comes before and after
+
+
+        Create these specific themed versions:
+        1. CONCISE: A shorter, more to-the-point version focusing on clarity
+        2. DRAMATIC: A shortened version with heightened emotional impact
+        3. MINIMAL: A stripped-down version using the fewest words possible
+        4. POETIC: A concise yet more lyrical and elevated version
+        5. PUNCHY: A shorter version with snappy, high-energy phrasing
+        """
+        
+        user_prompt = f"""
+        Script: {script_title}
+        Genre: {genre}
+        Character: {character_name}
+        Parenthetical mood: {parenthetical if parenthetical else "None provided"}
+        
+        Original dialogue:
+        "{text}"
+        
+        Create five distinct themed shortened alternatives as specified, each with a brief explanation of your approach.
+        Each version should be shorter than the original while preserving the character's voice and essential information.
+        """
+        
+        try:
+            # Use instructor with your schema
+            response = self.client.chat.completions.create(
+                model=self.deployment_name,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt}
+                ],
+                response_model=ScriptShortenerResponse,
+                temperature=settings.AZURE_OPENAI_TEMPERATURE
+            )
+            logger.info(response)
+            return response
+        
+        except Exception as e:
+            logger.error(f"Error shortening dialogue component: {str(e)}")
             raise

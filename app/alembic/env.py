@@ -7,6 +7,8 @@ from alembic import context
 from app.database import Base
 from app.models import script, users, beats, scenes
 
+# alembic -c app/alembic.ini upgrade 1234567abcde
+
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
 config = context.config

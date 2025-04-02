@@ -28,7 +28,13 @@ from app.services.scene_segment_service import SceneSegmentService
 from app.services.script_service import ScriptService
 
 from app.services.scene_segment_ai_service import SceneSegmentAIService
-from app.schemas.scene_segment_ai import SceneSegmentGenerationResponse, ScriptSceneGenerationRequestUser, AISceneSegmentGenerationResponse
+from app.schemas.scene_segment_ai import (SceneSegmentGenerationResponse, 
+                                          ScriptSceneGenerationRequestUser, 
+                                          AISceneSegmentGenerationResponse,
+                                          ShortenComponentResponse,
+                                          ApplyShortenedTextRequest,
+                                          ApplyShortenedTextResponse
+                                          )
 
 
 from app.models import scene_segments
@@ -389,3 +395,38 @@ async def update_script_changes(
     )
     
     return result
+
+
+
+@router.post("/components/{component_id}/shorten", response_model=ShortenComponentResponse)
+async def shorten_component(
+    component_id: UUID,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Generate multiple shortened alternatives for a component's content using AI.
+    Works for both ACTION and DIALOGUE components.
+    """
+    return SceneSegmentAIService.shorten_component(db, component_id)
+
+
+@router.post("/components/{component_id}/apply-shortened", response_model=ApplyShortenedTextResponse)
+async def apply_shortened_text(
+    component_id: UUID,
+    request: ApplyShortenedTextRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Apply a selected themed shortened text to the component.
+    Records the selection for analytics and tracking purposes.
+    """
+    # Call the service method to handle the business logic
+    ai_service = SceneSegmentAIService()
+    return ai_service.apply_shortening_alternative(
+        db=db,
+        component_id=component_id,
+        alternative_text=request.shortened_text,
+        user_id=current_user.id
+    )

@@ -13,10 +13,12 @@ import math
 from app.models.script import Script, ScriptCreationMethod
 from app.models.beats import Beat, MasterBeatSheet, ActEnum
 from app.models.scenes import SceneDescription
-from app.models.scene_segments import SceneSegment, SceneSegmentComponent, ComponentType
+from app.models.scene_segments import (SceneSegment, SceneSegmentComponent, ComponentType, ShorteningAlternative, ShorteningSelectionHistory)
 from app.schemas.scene_segment_ai import (GeneratedSceneSegment, SceneSegmentGenerationResponse, 
                                       AISceneComponent, AISceneSegmentGenerationResponse,
-                                      AISceneComponentResponse, GeneratedSceneSegmentResponseResponse)
+                                      AISceneComponentResponse, GeneratedSceneSegmentResponseResponse,
+                                      ShorteningAlternativeType, ShortenComponentResponse, ScriptRewrite)
+from app.schemas.scene_segment import ComponentUpdate
 
 
 from app.services.openai_service import AzureOpenAIService
@@ -533,3 +535,319 @@ class SceneSegmentAIService:
                 script_id=script_id,
                 user_id=user_id
             )
+        
+    @staticmethod
+    def shorten_component(db: Session, component_id: UUID) -> Dict[str, Any]:
+        """
+        Shorten a component's content using AI while maintaining its meaning.
+        Returns multiple alternative shortened versions.
+        """
+        # Get the component with validation
+        component = db.query(SceneSegmentComponent).filter(
+            and_(
+                SceneSegmentComponent.id == component_id,
+                SceneSegmentComponent.is_deleted.is_(False)
+            )
+        ).first()
+        
+        if not component:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Component not found"
+            )
+        
+        # Only allow shortening for supported component types
+        if component.component_type not in [ComponentType.ACTION, ComponentType.DIALOGUE]:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Cannot shorten component of type {component.component_type}"
+            )
+        
+        # Get segment for context
+        segment = db.query(SceneSegment).filter(
+            SceneSegment.id == component.scene_segment_id
+        ).first()
+        if not segment:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Parent segment not found"
+            )
+        
+        # Get script for genre information
+        script = db.query(Script).filter(Script.id == segment.script_id).first()
+        if not script:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Script not found"
+            )
+        
+        # Initialize OpenAI service
+        openai_service = AzureOpenAIService()
+        
+        # Process based on component type
+        try:
+            if component.component_type == ComponentType.ACTION:
+                alternatives = openai_service.shorten_action_component(
+                    text=component.content,
+                    context={
+                        "genre": script.genre,
+                        "script_title": script.title
+                    }
+                )
+            elif component.component_type == ComponentType.DIALOGUE:
+                alternatives = openai_service.shorten_dialogue_component(
+                    text=component.content,
+                    character_name=component.character_name,
+                    context={
+                        "genre": script.genre,
+                        "script_title": script.title,
+                        "parenthetical": component.parenthetical
+                    }
+                )
+            
+            # Delete any existing alternatives
+            db.query(ShorteningAlternative).filter(
+                ShorteningAlternative.component_id == component_id
+            ).delete(synchronize_session=False)
+            
+            # Store themed alternatives in database
+            db_alternatives = []
+            
+            # Concise alternative
+            concise = ShorteningAlternative(
+                component_id=component_id,
+                alternative_type=ShorteningAlternativeType.CONCISE,
+                shortened_text=alternatives.concise.shortened_text,
+                explanation=alternatives.concise.explanation
+            )
+            db.add(concise)
+            db_alternatives.append((ShorteningAlternativeType.CONCISE, concise))
+            
+            # Dramatic alternative
+            dramatic = ShorteningAlternative(
+                component_id=component_id,
+                alternative_type=ShorteningAlternativeType.DRAMATIC,
+                shortened_text=alternatives.dramatic.shortened_text,
+                explanation=alternatives.dramatic.explanation
+            )
+            db.add(dramatic)
+            db_alternatives.append((ShorteningAlternativeType.DRAMATIC, dramatic))
+            
+            # Minimal alternative
+            minimal = ShorteningAlternative(
+                component_id=component_id,
+                alternative_type=ShorteningAlternativeType.MINIMAL,
+                shortened_text=alternatives.minimal.shortened_text,
+                explanation=alternatives.minimal.explanation
+            )
+            db.add(minimal)
+            db_alternatives.append((ShorteningAlternativeType.MINIMAL, minimal))
+            
+            # Poetic alternative
+            poetic = ShorteningAlternative(
+                component_id=component_id,
+                alternative_type=ShorteningAlternativeType.POETIC,
+                shortened_text=alternatives.poetic.shortened_text,
+                explanation=alternatives.poetic.explanation
+            )
+            db.add(poetic)
+            db_alternatives.append((ShorteningAlternativeType.POETIC, poetic))
+            
+            # Punchy alternative
+            punchy = ShorteningAlternative(
+                component_id=component_id,
+                alternative_type=ShorteningAlternativeType.PUNCHY,
+                shortened_text=alternatives.punchy.shortened_text,
+                explanation=alternatives.punchy.explanation
+            )
+            db.add(punchy)
+            db_alternatives.append((ShorteningAlternativeType.PUNCHY, punchy))
+            
+            db.commit()
+            
+            # Create response object
+            return ShortenComponentResponse(
+                component_id=component_id,
+                original_text=component.content,
+                concise=ScriptRewrite(
+                    shortened_text=alternatives.concise.shortened_text,
+                    explanation=alternatives.concise.explanation
+                ),
+                dramatic=ScriptRewrite(
+                    shortened_text=alternatives.dramatic.shortened_text,
+                    explanation=alternatives.dramatic.explanation
+                ),
+                minimal=ScriptRewrite(
+                    shortened_text=alternatives.minimal.shortened_text,
+                    explanation=alternatives.minimal.explanation
+                ),
+                poetic=ScriptRewrite(
+                    shortened_text=alternatives.poetic.shortened_text,
+                    explanation=alternatives.poetic.explanation
+                ),
+                punchy=ScriptRewrite(
+                    shortened_text=alternatives.punchy.shortened_text,
+                    explanation=alternatives.punchy.explanation
+                )
+            )
+            
+        except Exception as e:
+            db.rollback()
+            logger.error(f"Error generating shortening alternatives: {str(e)}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Error generating shortening alternatives: {str(e)}"
+            )
+    @staticmethod
+    def update_component(
+        db: Session, 
+        component_id: UUID, 
+        update_data: ComponentUpdate
+    ) -> SceneSegmentComponent:
+        """
+        Update a component
+        """
+        component = db.query(SceneSegmentComponent).filter(
+            and_(
+                SceneSegmentComponent.id == component_id,
+                SceneSegmentComponent.is_deleted.is_(False)
+            )
+        ).first()
+        
+        if not component:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Component not found"
+            )
+                
+        # Apply updates
+        update_dict = update_data.model_dump(exclude_unset=True)
+        
+        for key, value in update_dict.items():
+            setattr(component, key, value)
+                
+        try:
+            db.commit()
+            db.refresh(component)
+            return component
+        except Exception as e:
+            db.rollback()
+            logger.error(f"Error updating component: {str(e)}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Error updating component: {str(e)}"
+            )
+
+    @staticmethod
+    def apply_shortening_alternative(
+        db: Session, 
+        component_id: UUID, 
+        alternative_text: str,
+        user_id: UUID
+    ) -> Dict[str, Any]:
+        """
+        Apply a selected shortening alternative to a component and record the selection.
+        Only updates if the content would change and only records selection if different from current.
+        
+        Args:
+            db: Database session
+            component_id: ID of the component to update
+            alternative_type: Type of shortening alternative to apply
+            user_id: ID of the user making the selection
+            
+        Returns:
+            Dictionary with updated component and status information
+            
+        Raises:
+            HTTPException: If component or alternative not found, or on database error
+        """
+        def _get_status_message(is_already_applied: bool, is_same_selection: bool) -> str:
+            """Generate an appropriate status message based on what happened."""
+            if is_already_applied and is_same_selection:
+                return "This alternative is already applied and was previously selected."
+            elif is_already_applied:
+                return "This alternative was already applied, but your selection has been recorded."
+            elif is_same_selection:
+                return "Component content updated, but this selection type was already recorded."
+            else:
+                return "Alternative successfully applied and recorded."
+        # Find the component
+        component = db.query(SceneSegmentComponent).filter(
+            and_(
+                SceneSegmentComponent.id == component_id,
+                SceneSegmentComponent.is_deleted.is_(False)
+            )
+        ).first()
+        
+        if not component:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Component not found"
+            )
+        
+        # Get the specific alternative
+        alternative = db.query(ShorteningAlternative).filter(
+            and_(
+                ShorteningAlternative.component_id == component_id,
+                ShorteningAlternative.shortened_text == alternative_text,
+                ShorteningAlternative.is_deleted.is_(False)
+            )
+        ).first()
+        
+        if not alternative:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Alternative of type {alternative_text} not found"
+            )
+        
+        try:
+            # Check if the component already has this alternative's content
+            is_already_applied = component.content == alternative.shortened_text
+            
+            # Get the most recent selection for this component (if any)
+            latest_selection = db.query(ShorteningSelectionHistory).filter(
+                ShorteningSelectionHistory.component_id == component_id
+            ).order_by(
+                ShorteningSelectionHistory.selected_at.desc()
+            ).first()
+            
+            is_same_selection = False
+            if latest_selection and latest_selection.alternative_type == alternative_text:
+                is_same_selection = True
+                
+            # Only update and record if something would change
+            if not is_already_applied:
+                # Update the component with the selected alternative's text
+                component.content = alternative.shortened_text
+                component.updated_at = func.now()
+            
+            # Only add to history if this is a different selection than the most recent one
+            if not is_same_selection:
+                # Record this selection in the history table
+                selection_history = ShorteningSelectionHistory(
+                    user_id=user_id,
+                    component_id=component_id,
+                    alternative_id=alternative.id,
+                    alternative_type=alternative.alternative_type
+                )
+                db.add(selection_history)
+            
+            db.commit()
+            
+            if not is_already_applied:
+                db.refresh(component)
+            
+            return {
+                "component": component,
+                "was_updated": not is_already_applied,
+                "was_recorded": not is_same_selection,
+                "message": _get_status_message(is_already_applied, is_same_selection)
+            }
+        except Exception as e:
+            db.rollback()
+            logger.error(f"Error applying shortened text: {str(e)}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Error applying shortened text: {str(e)}"
+            )
+

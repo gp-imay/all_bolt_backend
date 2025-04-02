@@ -4,7 +4,7 @@ from pydantic import BaseModel, UUID4, Field
 from typing import List, Optional, Dict, Any
 from enum import Enum
 
-from app.schemas.scene_segment import ComponentType  # Import existing enum
+from app.schemas.scene_segment import ComponentType, Component  # Import existing enum
 
 class ScriptSceneGenerationRequestUser(BaseModel):
     script_id: UUID4
@@ -90,3 +90,47 @@ class ComponentCreate(BaseModel):
     character_name: Optional[str] = None
     parenthetical: Optional[str] = None
     # id : UUID4
+
+
+##### For Shorten Service
+class ScriptRewrite(BaseModel):
+    shortened_text: str
+    explanation: str
+
+class ShorteningAlternativeType(str, Enum):
+    CONCISE = "concise"
+    DRAMATIC = "dramatic"
+    MINIMAL = "minimal"
+    POETIC = "poetic"
+    PUNCHY = "punchy"
+
+class ShortenComponentResponse(BaseModel):
+    component_id: UUID4
+    original_text: str
+    concise: ScriptRewrite
+    dramatic: ScriptRewrite
+    minimal: ScriptRewrite
+    poetic: ScriptRewrite
+    punchy: ScriptRewrite
+
+
+
+class ShortenerAlternative(BaseModel):
+    shortened_text: str = Field(..., description="The shortened version of the original text")
+    explanation: str = Field(..., description="Brief explanation of what was changed")
+
+# class ShortenComponentResponse(BaseModel):
+#     component: Component
+#     alternatives: List[ShortenerAlternative]
+#     original_text: str
+
+class ApplyShortenedTextRequest(BaseModel):
+    shortened_text: str = Field(..., description="The selected shortened text to apply")
+
+class ApplyShortenedTextResponse(BaseModel):
+    component: Component
+    was_updated: bool
+    was_recorded: bool
+    message: str
+
+##################################################
