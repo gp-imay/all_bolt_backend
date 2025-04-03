@@ -91,9 +91,10 @@ class ComponentCreate(BaseModel):
     parenthetical: Optional[str] = None
     # id : UUID4
 
-
+######################################################################################################################################################
+######################################################################################################################################################
 ##### For Shorten Service
-class ScriptRewrite(BaseModel):
+class ScriptShorten(BaseModel):
     shortened_text: str
     explanation: str
 
@@ -102,16 +103,16 @@ class ShorteningAlternativeType(str, Enum):
     DRAMATIC = "dramatic"
     MINIMAL = "minimal"
     POETIC = "poetic"
-    PUNCHY = "punchy"
+    HUMOROUS = "humorous"
 
 class ShortenComponentResponse(BaseModel):
     component_id: UUID4
     original_text: str
-    concise: ScriptRewrite
-    dramatic: ScriptRewrite
-    minimal: ScriptRewrite
-    poetic: ScriptRewrite
-    punchy: ScriptRewrite
+    concise: ScriptShorten
+    dramatic: ScriptShorten
+    minimal: ScriptShorten
+    poetic: ScriptShorten
+    humorous: ScriptShorten
 
 
 
@@ -133,4 +134,150 @@ class ApplyShortenedTextResponse(BaseModel):
     was_recorded: bool
     message: str
 
-##################################################
+######################################################################################################################################################
+######################################################################################################################################################
+
+
+######################################################################################################################################################
+######################################################################################################################################################
+##### For Rewrite Service
+class RewriteAlternativeType(str, Enum):
+    CONCISE = "concise"
+    DRAMATIC = "dramatic"
+    MINIMAL = "minimal"
+    POETIC = "poetic"
+    HUMOROUS = "humorous"
+
+class ScriptRewrite(BaseModel):
+    explanation: str = Field(..., description="Brief explanation of the changes and approach")
+    rewritten_text: str = Field(..., description="The rewritten version of the original text")
+    
+
+class RewriteComponentResponse(BaseModel):
+    component_id: UUID4
+    original_text: str
+    concise: ScriptRewrite
+    dramatic: ScriptRewrite
+    minimal: ScriptRewrite
+    poetic: ScriptRewrite
+    humorous: ScriptRewrite
+
+class ApplyRewriteTextRequest(BaseModel):
+    rewritten_text: str = Field(..., description="The selected rewritten text to apply")
+
+class ApplyRewriteTextResponse(BaseModel):
+    component: Component
+    was_updated: bool
+    was_recorded: bool
+    message: str
+
+class ScriptRewriteResponse(BaseModel):
+    concise: ScriptRewrite = Field(..., description="A focused, efficient version that cuts unnecessary description")
+    dramatic: ScriptRewrite = Field(..., description="A version with heightened tension and dramatic flair")
+    minimal: ScriptRewrite = Field(..., description="A version using sparse prose focused only on essentials")
+    poetic: ScriptRewrite = Field(..., description="A lyrical version with elegant language and vivid imagery")
+    humorous: ScriptRewrite = Field(..., description="A version with subtle wit or comedic undertones")
+
+
+######################################################################################################################################################
+######################################################################################################################################################
+##### For Expand Service
+class ExpansionAlternativeType(str, Enum):
+    CONCISE = "concise"
+    DRAMATIC = "dramatic"
+    MINIMAL = "minimal"
+    POETIC = "poetic"
+    HUMOROUS = "humorous"
+
+class ScriptExpansion(BaseModel):
+    explanation: str = Field(..., description="Brief explanation of what was expanded and how")
+    expanded_text: str = Field(..., description="The expanded version of the original text")
+    
+
+class ScriptExpansionResponse(BaseModel):
+    """
+    Contains multiple themed expansion alternatives for a script component.
+    """
+    concise: ScriptExpansion = Field(..., description="A moderately expanded version that adds crucial details while remaining economical")
+    dramatic: ScriptExpansion = Field(..., description="An expansion that heightens tension and emotional impact")
+    minimal: ScriptExpansion = Field(..., description="A carefully expanded version that adds only the most essential elements")
+    poetic: ScriptExpansion = Field(..., description="An expansion with rich imagery and sensory details")
+    humorous: ScriptExpansion = Field(..., description="An expansion that introduces subtle humor while maintaining the scene's purpose")
+
+
+class ExpandComponentResponse(BaseModel):
+    component_id: UUID4
+    original_text: str
+    concise: ScriptExpansion
+    dramatic: ScriptExpansion
+    minimal: ScriptExpansion
+    poetic: ScriptExpansion
+    humorous: ScriptExpansion
+
+
+class ApplyExpandedTextRequest(BaseModel):
+    expanded_text: str = Field(..., description="The selected expanded text to apply")
+
+
+class ApplyExpandedTextResponse(BaseModel):
+    component: Component  # This will contain the updated component data
+    was_updated: bool
+    was_recorded: bool
+    message: str
+
+
+
+######################################################################################################################################################
+######################################################################################################################################################
+##### For Continue Service
+class ContinuationAlternativeType(str, Enum):
+    CONCISE = "concise"
+    DRAMATIC = "dramatic"
+    MINIMAL = "minimal"
+    POETIC = "poetic" 
+    HUMOROUS = "humorous"
+
+class ScriptContinuation(BaseModel):
+    """
+    Represents a single continuation alternative with the continuation text and explanation.
+    """
+    explanation: str = Field(..., description="Brief explanation of the approach used for this continuation")
+    continuation_text: str = Field(..., description="The text that continues the original content")
+    
+
+class ScriptContinuationResponse(BaseModel):
+    """
+    Contains multiple themed continuation alternatives for a script component.
+    """
+    concise: ScriptContinuation = Field(..., description="A brief, focused continuation that gets to the point")
+    dramatic: ScriptContinuation = Field(..., description="A continuation with heightened tension or emotional impact")
+    minimal: ScriptContinuation = Field(..., description="A sparse continuation with only essential elements")
+    poetic: ScriptContinuation = Field(..., description="A lyrical continuation with rich imagery or metaphor")
+    humorous: ScriptContinuation = Field(..., description="A continuation with wit, irony, or comedic elements")
+
+class ContinueComponentResponse(BaseModel):
+    """
+    Response model for the continue component endpoint.
+    """
+    component_id: UUID4
+    original_text: str
+    concise: ScriptContinuation
+    dramatic: ScriptContinuation
+    minimal: ScriptContinuation
+    poetic: ScriptContinuation
+    humorous: ScriptContinuation
+
+class ApplyContinuationRequest(BaseModel):
+    """
+    Request model for applying a selected continuation.
+    """
+    continuation_text: str = Field(..., description="The selected continuation text to apply")
+
+class ApplyContinuationResponse(BaseModel):
+    """
+    Response model for the apply continuation endpoint.
+    """
+    component: Component  # This will contain the updated component data
+    was_updated: bool
+    was_recorded: bool
+    message: str

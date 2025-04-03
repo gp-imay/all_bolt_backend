@@ -10,7 +10,12 @@ from app.config import settings
 import traceback
 
 
-from app.schemas.scene_segment_ai import GeneratedSceneSegment, AISceneComponent
+from app.schemas.scene_segment_ai import (GeneratedSceneSegment,
+                                          ScriptRewriteResponse, 
+                                          ScriptExpansion,
+                                          ScriptExpansionResponse,
+                                          ScriptContinuationResponse
+                                          )
 
 
 logger = logging.getLogger(__name__)
@@ -50,8 +55,8 @@ class GeneratedScene(BaseModel):
     position: int
 
 class ScriptRewrite(BaseModel):
-    shortened_text: str = Field(..., description="Concise version of the script segment")
     explanation: str = Field(..., description="How the script was refined for brevity and impact")
+    shortened_text: str = Field(..., description="Concise version of the script segment")
 
 
 class ScriptShortenerResponse(BaseModel):
@@ -59,9 +64,7 @@ class ScriptShortenerResponse(BaseModel):
     dramatic: ScriptRewrite = Field(..., description="A shortened version with heightened drama and impact")
     minimal: ScriptRewrite = Field(..., description="A stripped-down version using the fewest words possible")
     poetic: ScriptRewrite = Field(..., description="A concise yet more lyrical and visually rich version")
-    punchy: ScriptRewrite = Field(..., description="A shorter version with snappy, high-energy phrasing")
-
-
+    humorous: ScriptRewrite = Field(..., description="A shorter version with amusing or funny tone")
 
 class AzureOpenAIService:
     def __init__(self):
@@ -507,7 +510,7 @@ class AzureOpenAIService:
         2. DRAMATIC: A shortened version with heightened tension and impact
         3. MINIMAL: A stripped-down version using the fewest words possible
         4. POETIC: A concise yet more lyrical and visually rich version
-        5. PUNCHY: A shorter version with snappy, high-energy phrasing
+        5. HUMOROUS: A shorter version with amusing or funny tone
         """
         
         user_prompt = f"""
@@ -572,7 +575,7 @@ class AzureOpenAIService:
         2. DRAMATIC: A shortened version with heightened emotional impact
         3. MINIMAL: A stripped-down version using the fewest words possible
         4. POETIC: A concise yet more lyrical and elevated version
-        5. PUNCHY: A shorter version with snappy, high-energy phrasing
+        5. HUMOROUS: A shorter version with amusing or funny tone
         """
         
         user_prompt = f"""
@@ -604,4 +607,424 @@ class AzureOpenAIService:
         
         except Exception as e:
             logger.error(f"Error shortening dialogue component: {str(e)}")
+            raise
+
+
+    def rewrite_action_component(self, text: str, context: dict) -> ScriptRewriteResponse:
+        """
+        Rewrite an action component with themed alternatives.
+        
+        Args:
+            text: The original action text to rewrite
+            context: Contextual information about the script
+        
+        Returns:
+            A ScriptRewriteResponse with multiple themed alternatives
+        """
+        genre = context.get("genre", "")
+        script_title = context.get("script_title", "")
+        
+        system_prompt = """
+        You are a professional screenplay consultant specializing in action descriptions. Your expertise lies in rewriting action blocks to fit different tones and styles while maintaining the essential narrative elements.
+
+        Task: Create FIVE distinct themed versions of the provided action text, each with a different style but all conveying the same essential visual information and narrative purpose.
+
+        Create these specific themed versions:
+        1. CONCISE: A focused, efficient version that cuts unnecessary description while maintaining clarity
+        2. DRAMATIC: A version with heightened tension, evocative language, and dramatic flair
+        3. MINIMAL: A version using sparse, hemingway-esque prose focused only on essential movements
+        4. POETIC: A lyrical, visually-rich version with elegant language and vivid imagery
+        5. HUMOROUS: A version with subtle wit, irony, or comedic undertones that add levity
+        
+        For each rewrite:
+        - Maintain the same essential story beats and visual information
+        - Keep the same character actions and motivations
+        - Focus on style transformation, not content change
+        - Include a brief explanation of your approach and specific techniques used
+        
+        Constraints:
+        - No clichés
+        - No excessive description
+        - No melodrama unless specifically in the "dramatic" version
+        - Keep the cinematographic qualities intact
+        """
+        
+        user_prompt = f"""
+        Script: {script_title}
+        Genre: {genre}
+        
+        Original action description:
+        "{text}"
+        
+        Create five distinct themed rewrites as specified, each with a brief explanation of your approach.
+        Each version should match its theme while preserving the essential narrative and visual elements.
+        """
+        
+        try:
+            # Use instructor with your schema
+            response = self.client.chat.completions.create(
+                model=self.deployment_name,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt}
+                ],
+                response_model=ScriptRewriteResponse,
+                temperature=settings.AZURE_OPENAI_TEMPERATURE
+            )
+            
+            return response
+        
+        except Exception as e:
+            logger.error(f"Error rewriting action component: {str(e)}")
+            raise
+
+    def rewrite_dialogue_component(self, text: str, character_name: str, context: dict) -> ScriptRewriteResponse:
+        """
+        Rewrite a dialogue component with themed alternatives.
+        
+        Args:
+            text: The original dialogue text to rewrite
+            character_name: The name of the character speaking
+            context: Contextual information about the script and character
+        
+        Returns:
+            A ScriptRewriteResponse with multiple themed alternatives
+        """
+        genre = context.get("genre", "")
+        script_title = context.get("script_title", "")
+        parenthetical = context.get("parenthetical", "")
+        
+        system_prompt = f"""
+        You are a dialogue consultant for screenplays, specializing in authentic character voice and diverse writing styles. Your task is to rewrite dialogue for {character_name} with five different stylistic approaches.
+
+        Task: Create FIVE distinct themed versions of {character_name}'s dialogue, each with a different style but all conveying the same essential information and character intention.
+
+        Create these specific themed versions:
+        1. CONCISE: Stripped-down, essential dialogue where each word counts
+        2. DRAMATIC: Emotionally heightened dialogue with strong subtext and psychological depth
+        3. MINIMAL: Sparse, understated dialogue using as few words as possible
+        4. POETIC: Dialogue with literary quality, rhythm, metaphor, and rich language
+        5. HUMOROUS: Dialogue with wit, comedic timing, or subtle humor that fits the character
+        
+        Character context:
+        - Character: {character_name}
+        - Emotional state: {parenthetical if parenthetical else "Not specified"}
+        
+        For each rewrite:
+        - Maintain character consistency (voice, vocabulary, speech patterns)
+        - Preserve the core meaning and intention of the line
+        - Adjust only the stylistic approach, not the fundamental content
+        - Include a brief explanation of your approach and techniques used
+        
+        Constraints:
+        - No unnecessary exposition
+        - Avoid clichés and stock phrases
+        - Maintain subtext and character psychology
+        - Ensure dialogue feels natural to speak aloud
+        """
+        
+        user_prompt = f"""
+        Script: {script_title}
+        Genre: {genre}
+        Character: {character_name}
+        
+        Original dialogue:
+        "{text}"
+        
+        Create five distinct themed rewrites as specified, each with a brief explanation of your approach.
+        Each version should match its theme while preserving the essential meaning and character voice.
+        """
+        
+        try:
+            # Use instructor with your schema
+            response = self.client.chat.completions.create(
+                model=self.deployment_name,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt}
+                ],
+                response_model=ScriptRewriteResponse,
+                temperature=settings.AZURE_OPENAI_TEMPERATURE
+            )
+            
+            return response
+        
+        except Exception as e:
+            logger.error(f"Error rewriting dialogue component: {str(e)}")
+            raise
+
+
+    def expand_action_component(self, text: str, context: dict) -> ScriptExpansion:
+        """
+        Expand an action component with themed alternatives.
+        """
+        genre = context.get("genre", "")
+        script_title = context.get("script_title", "")
+        
+        system_prompt = """
+        You are a professional screenplay editor with expertise in action description enhancement. 
+        Your task is to expand and enrich action blocks while maintaining the screenplay's tone and pacing.
+
+        Task: Create FIVE distinct themed expansions of the provided action text, each with a different style but all
+        enhancing the visual storytelling without becoming verbose.
+
+        Create these specific themed versions:
+        1. CONCISE: A moderately expanded version that adds crucial visual details while remaining economical with words
+        2. DRAMATIC: An expansion that heightens tension and emotional impact with atmospheric details
+        3. MINIMAL: A carefully expanded version that adds only the most essential visual elements
+        4. POETIC: An expansion with rich imagery and sensory details that create a distinctive visual style
+        5. HUMOROUS: An expansion that introduces subtle humor or irony while maintaining the scene's purpose
+
+        Each expansion should:
+        - Enhance visual storytelling without becoming verbose
+        - Maintain the original action's core purpose
+        - Be tailored to the genre of the screenplay
+        - Avoid dialogue or character thoughts unless they're in the original
+        - Preserve the flow and pacing of the scene
+        """
+        
+        user_prompt = f"""
+        Script: {script_title}
+        Genre: {genre}
+        
+        Original action description:
+        "{text}"
+        
+        Create five distinct themed expansions as specified, each with a brief explanation of your approach.
+        Each expansion should enhance the visual storytelling while respecting the screenplay format.
+        """
+        
+        try:
+            # Use instructor with your schema
+            response = self.client.chat.completions.create(
+                model=self.deployment_name,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt}
+                ],
+                response_model=ScriptExpansionResponse,
+                temperature=settings.AZURE_OPENAI_TEMPERATURE
+            )
+            
+            return response
+        
+        except Exception as e:
+            logger.error(f"Error expanding action component: {str(e)}")
+            raise
+
+    def expand_dialogue_component(self, text: str, character_name: str, context: dict) -> ScriptExpansionResponse:
+        """
+        Expand a dialogue component with themed alternatives.
+        """
+        genre = context.get("genre", "")
+        script_title = context.get("script_title", "")
+        parenthetical = context.get("parenthetical", "")
+        
+        system_prompt = """
+        You are a dialogue specialist with expertise in screenplay writing and character voice development. 
+        Your task is to expand dialogue to enhance character development and dramatic impact while maintaining 
+        the character's unique voice and the scene's purpose.
+
+        Situation: You are working with a script excerpt that needs dialogue expansion to more fully reveal character,
+        advance the plot, or heighten emotional impact.
+
+        Task: Analyze and expand the provided dialogue from the given genre script for the character, adding depth
+        and nuance while preserving the character's voice and the scene's dramatic intent.
+
+        Objective: Create more impactful, developed dialogue that enhances the character's personality, advances story
+        elements, or increases emotional resonance without becoming unnecessarily verbose.
+
+        When expanding dialogue:
+        - Maintain the character's established voice, speech patterns, and vocabulary
+        - Consider the genre and appropriate dialogue style
+        - Keep additions natural to the flow of conversation
+        - Avoid exposition that would be unnatural in speech
+        - Consider the parenthetical mood information if provided
+        - Ensure expansion serves character development, plot advancement, or emotional impact
+
+        Create these specific themed versions:
+        1. CONCISE: A moderately expanded version that adds character depth while remaining relatively economical
+        2. DRAMATIC: An expansion that heightens emotional impact and tension
+        3. MINIMAL: A carefully expanded version that adds just enough to deepen characterization
+        4. POETIC: An expansion with more lyrical or metaphorical language appropriate to the character
+        5. HUMOROUS: An expansion that introduces subtle humor or wit while maintaining the character's voice
+        """
+        
+        user_prompt = f"""
+        Script: {script_title}
+        Genre: {genre}
+        Character: {character_name}
+        Parenthetical mood: {parenthetical if parenthetical else "None provided"}
+        
+        Original dialogue:
+        "{text}"
+        
+        Create five distinct themed dialogue expansions as specified, each with a brief explanation of your approach.
+        Each expansion should enhance the character while maintaining their voice and the scene's purpose.
+        """
+        
+        try:
+            # Use instructor with your schema
+            response = self.client.chat.completions.create(
+                model=self.deployment_name,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt}
+                ],
+                response_model=ScriptExpansionResponse,
+                temperature=settings.AZURE_OPENAI_TEMPERATURE
+            )
+            
+            return response
+        
+        except Exception as e:
+            logger.error(f"Error expanding dialogue component: {str(e)}")
+            raise
+
+
+    def continue_action_component(self, text: str, context: dict) -> ScriptContinuationResponse:
+        """
+        Generate continuations for an action component with multiple themed alternatives.
+        
+        Args:
+            text: The original action text to continue
+            context: Contextual information about the script
+        
+        Returns:
+            ScriptContinuationResponse with multiple themed continuation alternatives
+        """
+        genre = context.get("genre", "")
+        script_title = context.get("script_title", "")
+        
+        system_prompt = """
+        You are a professional screenplay writer with expertise in action description continuation. Your task is to continue the given action block in a screenplay with multiple themed variations.
+
+        Task: Create FIVE distinct themed continuations of the provided action text, each with a different style but all maintaining narrative coherence and visual storytelling principles.
+
+        Create these specific themed continuations:
+        1. CONCISE: A brief, focused continuation that gets straight to the point without unnecessary description
+        2. DRAMATIC: A continuation with heightened tension, evocative language, and dramatic impact
+        3. MINIMAL: A sparse, hemingway-esque continuation using only essential words and visual elements
+        4. POETIC: A lyrical continuation with rich imagery, metaphor, and sensory details
+        5. HUMOROUS: A continuation that introduces subtle wit, irony, or comedic elements while maintaining scene integrity
+        
+        For each continuation:
+        - Ensure it flows naturally from the original text
+        - Maintain the established tone and visual style
+        - Respect screenplay format conventions
+        - Keep the continuation focused on action (not dialogue)
+        - Include a brief explanation of your approach and specific techniques used
+        
+        Constraints:
+        - No introducing new main characters
+        - No drastic scene changes
+        - No dialogue lines
+        - No "CONTINUED FROM" or "TO BE CONTINUED" meta-references
+        - Keep within screenplay formatting conventions
+        """
+        
+        user_prompt = f"""
+        Script: {script_title}
+        Genre: {genre}
+        
+        Original action description:
+        "{text}"
+        
+        Please continue this action description with five distinct themed variations as specified.
+        Each continuation should flow naturally from the original text and maintain the established visual style.
+        """
+        
+        try:
+            # Use instructor with the ScriptContinuationResponse schema
+            response = self.client.chat.completions.create(
+                model=self.deployment_name,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt}
+                ],
+                response_model=ScriptContinuationResponse,
+                temperature=settings.AZURE_OPENAI_TEMPERATURE
+            )
+            
+            return response
+        
+        except Exception as e:
+            logger.error(f"Error continuing action component: {str(e)}")
+            raise
+
+    def continue_dialogue_component(self, text: str, character_name: str, context: dict) -> ScriptContinuationResponse:
+        """
+        Generate continuations for a dialogue component with multiple themed alternatives.
+        
+        Args:
+            text: The original dialogue text to continue
+            character_name: The name of the character speaking
+            context: Contextual information about the script and character
+        
+        Returns:
+            ScriptContinuationResponse with multiple themed continuation alternatives
+        """
+        genre = context.get("genre", "")
+        script_title = context.get("script_title", "")
+        parenthetical = context.get("parenthetical", "")
+        
+        system_prompt = f"""
+        You are a dialogue specialist for screenplays, with expertise in character voice and authentic speech patterns. Your task is to continue the dialogue for {character_name} with multiple themed variations.
+
+        Task: Create FIVE distinct themed continuations of {character_name}'s dialogue, each with a different style but all maintaining the character's established voice and the scene's dramatic purpose.
+
+        Create these specific themed continuations:
+        1. CONCISE: A brief, direct continuation focusing on the character's immediate goal or reaction
+        2. DRAMATIC: A continuation with heightened emotional intensity, revealing deeper feelings or stakes
+        3. MINIMAL: A sparse, understated continuation using as few words as possible while preserving meaning
+        4. POETIC: A continuation with literary quality, metaphorical language, or philosophical depth
+        5. HUMOROUS: A continuation that introduces wit, irony, or comedic elements appropriate to the character
+        
+        Character context:
+        - Name: {character_name}
+        - Emotional state: {parenthetical if parenthetical else "Not specified"}
+        
+        For each continuation:
+        - Ensure it flows naturally from the original dialogue
+        - Maintain the character's established voice, vocabulary, and speech patterns
+        - Respect the emotional state indicated by any parenthetical direction
+        - Keep the continuation in character and consistent with the scene's purpose
+        - Include a brief explanation of your approach and how it serves the character
+        
+        Constraints:
+        - No introducing new plot elements that would dramatically change the scene
+        - No switching to another character's dialogue
+        - No stage directions or action descriptions
+        - No "trailing off" endings that don't actually continue the thought
+        - Ensure the dialogue sounds natural when spoken aloud
+        """
+        
+        user_prompt = f"""
+        Script: {script_title}
+        Genre: {genre}
+        Character: {character_name}
+        
+        Original dialogue:
+        "{text}"
+        
+        Please continue this dialogue with five distinct themed variations as specified.
+        Each continuation should sound natural for {character_name} and flow seamlessly from the original line.
+        """
+        
+        try:
+            # Use instructor with the ScriptContinuationResponse schema
+            response = self.client.chat.completions.create(
+                model=self.deployment_name,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt}
+                ],
+                response_model=ScriptContinuationResponse,
+                temperature=settings.AZURE_OPENAI_TEMPERATURE
+            )
+            
+            return response
+        
+        except Exception as e:
+            logger.error(f"Error continuing dialogue component: {str(e)}")
             raise

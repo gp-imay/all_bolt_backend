@@ -13,11 +13,18 @@ import math
 from app.models.script import Script, ScriptCreationMethod
 from app.models.beats import Beat, MasterBeatSheet, ActEnum
 from app.models.scenes import SceneDescription
-from app.models.scene_segments import (SceneSegment, SceneSegmentComponent, ComponentType, ShorteningAlternative, ShorteningSelectionHistory)
+from app.models.scene_segments import (SceneSegment, SceneSegmentComponent, ComponentType, 
+                                       ShorteningAlternative, ShorteningSelectionHistory,
+                                       RewriteAlternative, RewriteSelectionHistory,
+                                       ExpansionAlternative, ExpansionSelectionHistory,
+                                       ContinuationAlternative, ContinuationSelectionHistory)
 from app.schemas.scene_segment_ai import (GeneratedSceneSegment, SceneSegmentGenerationResponse, 
                                       AISceneComponent, AISceneSegmentGenerationResponse,
                                       AISceneComponentResponse, GeneratedSceneSegmentResponseResponse,
-                                      ShorteningAlternativeType, ShortenComponentResponse, ScriptRewrite)
+                                      ShorteningAlternativeType, ShortenComponentResponse, ScriptRewrite,ScriptShorten,
+                                      RewriteComponentResponse, RewriteAlternativeType,
+                                      ExpandComponentResponse, ExpansionAlternativeType, ScriptExpansion,
+                                      ContinueComponentResponse, ContinuationAlternativeType,ScriptContinuation)
 from app.schemas.scene_segment import ComponentUpdate
 
 
@@ -654,14 +661,14 @@ class SceneSegmentAIService:
             db_alternatives.append((ShorteningAlternativeType.POETIC, poetic))
             
             # Punchy alternative
-            punchy = ShorteningAlternative(
+            humorous = ShorteningAlternative(
                 component_id=component_id,
-                alternative_type=ShorteningAlternativeType.PUNCHY,
-                shortened_text=alternatives.punchy.shortened_text,
-                explanation=alternatives.punchy.explanation
+                alternative_type=ShorteningAlternativeType.HUMOROUS,
+                shortened_text=alternatives.humorous.shortened_text,
+                explanation=alternatives.humorous.explanation
             )
-            db.add(punchy)
-            db_alternatives.append((ShorteningAlternativeType.PUNCHY, punchy))
+            db.add(humorous)
+            db_alternatives.append((ShorteningAlternativeType.HUMOROUS, humorous))
             
             db.commit()
             
@@ -669,30 +676,31 @@ class SceneSegmentAIService:
             return ShortenComponentResponse(
                 component_id=component_id,
                 original_text=component.content,
-                concise=ScriptRewrite(
+                concise=ScriptShorten(
                     shortened_text=alternatives.concise.shortened_text,
                     explanation=alternatives.concise.explanation
                 ),
-                dramatic=ScriptRewrite(
+                dramatic=ScriptShorten(
                     shortened_text=alternatives.dramatic.shortened_text,
                     explanation=alternatives.dramatic.explanation
                 ),
-                minimal=ScriptRewrite(
+                minimal=ScriptShorten(
                     shortened_text=alternatives.minimal.shortened_text,
                     explanation=alternatives.minimal.explanation
                 ),
-                poetic=ScriptRewrite(
+                poetic=ScriptShorten(
                     shortened_text=alternatives.poetic.shortened_text,
                     explanation=alternatives.poetic.explanation
                 ),
-                punchy=ScriptRewrite(
-                    shortened_text=alternatives.punchy.shortened_text,
-                    explanation=alternatives.punchy.explanation
+                humorous=ScriptShorten(
+                    shortened_text=alternatives.humorous.shortened_text,
+                    explanation=alternatives.humorous.explanation
                 )
             )
             
         except Exception as e:
             db.rollback()
+            logger.error(traceback.format_exc())
             logger.error(f"Error generating shortening alternatives: {str(e)}")
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -851,3 +859,854 @@ class SceneSegmentAIService:
                 detail=f"Error applying shortened text: {str(e)}"
             )
 
+    @staticmethod
+    def rewrite_component(db: Session, component_id: UUID) -> Dict[str, Any]:
+        """
+        Rewrite a component's content using AI while maintaining its meaning.
+        Returns multiple alternative rewritten versions.
+        """
+        # Get the component with validation
+        component = db.query(SceneSegmentComponent).filter(
+            and_(
+                SceneSegmentComponent.id == component_id,
+                SceneSegmentComponent.is_deleted.is_(False)
+            )
+        ).first()
+        
+        if not component:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Component not found"
+            )
+        
+        # Only allow rewriting for supported component types
+        if component.component_type not in [ComponentType.ACTION, ComponentType.DIALOGUE]:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Cannot rewrite component of type {component.component_type}"
+            )
+        
+        # Get segment for context
+        segment = db.query(SceneSegment).filter(
+            SceneSegment.id == component.scene_segment_id
+        ).first()
+        if not segment:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Parent segment not found"
+            )
+        
+        # Get script for genre information
+        script = db.query(Script).filter(Script.id == segment.script_id).first()
+        if not script:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Script not found"
+            )
+        
+        # Get additional character context if available
+        character_traits = ""
+        if component.component_type == ComponentType.DIALOGUE and component.character_name:
+            # Here you could potentially look up character information from a character database
+            # For now, we'll leave it blank or could derive from previous dialogues
+            pass
+        
+        # Initialize OpenAI service
+        openai_service = AzureOpenAIService()
+        
+        # Process based on component type
+        try:
+            if component.component_type == ComponentType.ACTION:
+                alternatives = openai_service.rewrite_action_component(
+                    text=component.content,
+                    context={
+                        "genre": script.genre,
+                        "script_title": script.title
+                    }
+                )
+            elif component.component_type == ComponentType.DIALOGUE:
+                alternatives = openai_service.rewrite_dialogue_component(
+                    text=component.content,
+                    character_name=component.character_name,
+                    context={
+                        "genre": script.genre,
+                        "script_title": script.title,
+                        "parenthetical": component.parenthetical,
+                        "character_traits": character_traits
+                    }
+                )
+            
+            # Delete any existing alternatives
+            db.query(RewriteAlternative).filter(
+                RewriteAlternative.component_id == component_id
+            ).delete(synchronize_session=False)
+            
+            # Store themed alternatives in database
+            db_alternatives = []
+            
+            # Concise alternative
+            concise = RewriteAlternative(
+                component_id=component_id,
+                alternative_type=RewriteAlternativeType.CONCISE,
+                rewritten_text=alternatives.concise.rewritten_text,
+                explanation=alternatives.concise.explanation
+            )
+            db.add(concise)
+            db_alternatives.append((RewriteAlternativeType.CONCISE, concise))
+            
+            # Dramatic alternative
+            dramatic = RewriteAlternative(
+                component_id=component_id,
+                alternative_type=RewriteAlternativeType.DRAMATIC,
+                rewritten_text=alternatives.dramatic.rewritten_text,
+                explanation=alternatives.dramatic.explanation
+            )
+            db.add(dramatic)
+            db_alternatives.append((RewriteAlternativeType.DRAMATIC, dramatic))
+            
+            # Minimal alternative
+            minimal = RewriteAlternative(
+                component_id=component_id,
+                alternative_type=RewriteAlternativeType.MINIMAL,
+                rewritten_text=alternatives.minimal.rewritten_text,
+                explanation=alternatives.minimal.explanation
+            )
+            db.add(minimal)
+            db_alternatives.append((RewriteAlternativeType.MINIMAL, minimal))
+            
+            # Poetic alternative
+            poetic = RewriteAlternative(
+                component_id=component_id,
+                alternative_type=RewriteAlternativeType.POETIC,
+                rewritten_text=alternatives.poetic.rewritten_text,
+                explanation=alternatives.poetic.explanation
+            )
+            db.add(poetic)
+            db_alternatives.append((RewriteAlternativeType.POETIC, poetic))
+            
+            # Humorous alternative
+            humorous = RewriteAlternative(
+                component_id=component_id,
+                alternative_type=RewriteAlternativeType.HUMOROUS,
+                rewritten_text=alternatives.humorous.rewritten_text,
+                explanation=alternatives.humorous.explanation
+            )
+            db.add(humorous)
+            db_alternatives.append((RewriteAlternativeType.HUMOROUS, humorous))
+            
+            db.commit()
+            
+            # Create response object
+            return RewriteComponentResponse(
+                component_id=component_id,
+                original_text=component.content,
+                concise=ScriptRewrite(
+                    rewritten_text=alternatives.concise.rewritten_text,
+                    explanation=alternatives.concise.explanation
+                ),
+                dramatic=ScriptRewrite(
+                    rewritten_text=alternatives.dramatic.rewritten_text,
+                    explanation=alternatives.dramatic.explanation
+                ),
+                minimal=ScriptRewrite(
+                    rewritten_text=alternatives.minimal.rewritten_text,
+                    explanation=alternatives.minimal.explanation
+                ),
+                poetic=ScriptRewrite(
+                    rewritten_text=alternatives.poetic.rewritten_text,
+                    explanation=alternatives.poetic.explanation
+                ),
+                humorous=ScriptRewrite(
+                    rewritten_text=alternatives.humorous.rewritten_text,
+                    explanation=alternatives.humorous.explanation
+                )
+            )
+            
+        except Exception as e:
+            db.rollback()
+            logger.error(f"Error generating rewriting alternatives: {str(e)}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Error generating rewriting alternatives: {str(e)}"
+            )
+
+    @staticmethod
+    def apply_rewrite_alternative(
+        db: Session, 
+        component_id: UUID, 
+        rewritten_text: str,
+        user_id: UUID
+    ) -> Dict[str, Any]:
+        """
+        Apply a selected rewrite alternative to a component and record the selection.
+        Only updates if the content would change and only records selection if different from current.
+        
+        Args:
+            db: Database session
+            component_id: ID of the component to update
+            rewritten_text: The selected rewritten text to apply
+            user_id: ID of the user making the selection
+            
+        Returns:
+            Dictionary with updated component and status information
+            
+        Raises:
+            HTTPException: If component or alternative not found, or on database error
+        """
+        def _get_status_message(is_already_applied: bool, is_same_selection: bool) -> str:
+            """Generate an appropriate status message based on what happened."""
+            if is_already_applied and is_same_selection:
+                return "This alternative is already applied and was previously selected."
+            elif is_already_applied:
+                return "This alternative was already applied, but your selection has been recorded."
+            elif is_same_selection:
+                return "Component content updated, but this selection type was already recorded."
+            else:
+                return "Alternative successfully applied and recorded."
+            
+        # Find the component
+        component = db.query(SceneSegmentComponent).filter(
+            and_(
+                SceneSegmentComponent.id == component_id,
+                SceneSegmentComponent.is_deleted.is_(False)
+            )
+        ).first()
+        
+        if not component:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Component not found"
+            )
+        
+        # Get the specific alternative
+        alternative = db.query(RewriteAlternative).filter(
+            and_(
+                RewriteAlternative.component_id == component_id,
+                RewriteAlternative.rewritten_text == rewritten_text,
+                RewriteAlternative.is_deleted.is_(False)
+            )
+        ).first()
+        
+        if not alternative:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Alternative with provided rewritten text not found"
+            )
+        
+        try:
+            # Check if the component already has this alternative's content
+            is_already_applied = component.content == alternative.rewritten_text
+            
+            # Get the most recent selection for this component (if any)
+            latest_selection = db.query(RewriteSelectionHistory).filter(
+                RewriteSelectionHistory.component_id == component_id
+            ).order_by(
+                RewriteSelectionHistory.selected_at.desc()
+            ).first()
+            
+            is_same_selection = False
+            if latest_selection and latest_selection.alternative_type == alternative.alternative_type:
+                is_same_selection = True
+                
+            # Only update and record if something would change
+            if not is_already_applied:
+                # Update the component with the selected alternative's text
+                component.content = alternative.rewritten_text
+                component.updated_at = func.now()
+            
+            # Only add to history if this is a different selection than the most recent one
+            if not is_same_selection:
+                # Record this selection in the history table
+                selection_history = RewriteSelectionHistory(
+                    user_id=user_id,
+                    component_id=component_id,
+                    alternative_id=alternative.id,
+                    alternative_type=alternative.alternative_type
+                )
+                db.add(selection_history)
+            
+            db.commit()
+            
+            if not is_already_applied:
+                db.refresh(component)
+            
+            return {
+                "component": component,
+                "was_updated": not is_already_applied,
+                "was_recorded": not is_same_selection,
+                "message": _get_status_message(is_already_applied, is_same_selection)
+            }
+        except Exception as e:
+            db.rollback()
+            logger.error(f"Error applying rewritten text: {str(e)}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Error applying rewritten text: {str(e)}"
+            )
+        
+
+    @staticmethod
+    def expand_component(db: Session, component_id: UUID) -> Dict[str, Any]:
+        """
+        Expand a component's content using AI while maintaining its meaning.
+        Returns multiple alternative expanded versions.
+        """
+        # Get the component with validation
+        component = db.query(SceneSegmentComponent).filter(
+            and_(
+                SceneSegmentComponent.id == component_id,
+                SceneSegmentComponent.is_deleted.is_(False)
+            )
+        ).first()
+        
+        if not component:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Component not found"
+            )
+        
+        # Only allow expansion for supported component types
+        if component.component_type not in [ComponentType.ACTION, ComponentType.DIALOGUE]:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Cannot expand component of type {component.component_type}"
+            )
+        
+        # Get segment for context
+        segment = db.query(SceneSegment).filter(
+            SceneSegment.id == component.scene_segment_id
+        ).first()
+        if not segment:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Parent segment not found"
+            )
+        
+        # Get script for genre information
+        script = db.query(Script).filter(Script.id == segment.script_id).first()
+        if not script:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Script not found"
+            )
+        
+        # Initialize OpenAI service
+        openai_service = AzureOpenAIService()
+        
+        # Process based on component type
+        try:
+            if component.component_type == ComponentType.ACTION:
+                alternatives = openai_service.expand_action_component(
+                    text=component.content,
+                    context={
+                        "genre": script.genre,
+                        "script_title": script.title
+                    }
+                )
+            elif component.component_type == ComponentType.DIALOGUE:
+                alternatives = openai_service.expand_dialogue_component(
+                    text=component.content,
+                    character_name=component.character_name,
+                    context={
+                        "genre": script.genre,
+                        "script_title": script.title,
+                        "parenthetical": component.parenthetical
+                    }
+                )
+            
+            # Delete any existing alternatives
+            db.query(ExpansionAlternative).filter(
+                ExpansionAlternative.component_id == component_id
+            ).delete(synchronize_session=False)
+            
+            # Store themed alternatives in database
+            db_alternatives = []
+            
+            # Concise alternative
+            concise = ExpansionAlternative(
+                component_id=component_id,
+                alternative_type=ExpansionAlternativeType.CONCISE,
+                expanded_text=alternatives.concise.expanded_text,
+                explanation=alternatives.concise.explanation
+            )
+            db.add(concise)
+            db_alternatives.append((ExpansionAlternativeType.CONCISE, concise))
+            
+            # Dramatic alternative
+            dramatic = ExpansionAlternative(
+                component_id=component_id,
+                alternative_type=ExpansionAlternativeType.DRAMATIC,
+                expanded_text=alternatives.dramatic.expanded_text,
+                explanation=alternatives.dramatic.explanation
+            )
+            db.add(dramatic)
+            db_alternatives.append((ExpansionAlternativeType.DRAMATIC, dramatic))
+            
+            # Minimal alternative
+            minimal = ExpansionAlternative(
+                component_id=component_id,
+                alternative_type=ExpansionAlternativeType.MINIMAL,
+                expanded_text=alternatives.minimal.expanded_text,
+                explanation=alternatives.minimal.explanation
+            )
+            db.add(minimal)
+            db_alternatives.append((ExpansionAlternativeType.MINIMAL, minimal))
+            
+            # Poetic alternative
+            poetic = ExpansionAlternative(
+                component_id=component_id,
+                alternative_type=ExpansionAlternativeType.POETIC,
+                expanded_text=alternatives.poetic.expanded_text,
+                explanation=alternatives.poetic.explanation
+            )
+            db.add(poetic)
+            db_alternatives.append((ExpansionAlternativeType.POETIC, poetic))
+            
+            # Humorous alternative
+            humorous = ExpansionAlternative(
+                component_id=component_id,
+                alternative_type=ExpansionAlternativeType.HUMOROUS,
+                expanded_text=alternatives.humorous.expanded_text,
+                explanation=alternatives.humorous.explanation
+            )
+            db.add(humorous)
+            db_alternatives.append((ExpansionAlternativeType.HUMOROUS, humorous))
+            
+            db.commit()
+            
+            # Create response object
+            return ExpandComponentResponse(
+                component_id=component_id,
+                original_text=component.content,
+                concise=ScriptExpansion(
+                    expanded_text=alternatives.concise.expanded_text,
+                    explanation=alternatives.concise.explanation
+                ),
+                dramatic=ScriptExpansion(
+                    expanded_text=alternatives.dramatic.expanded_text,
+                    explanation=alternatives.dramatic.explanation
+                ),
+                minimal=ScriptExpansion(
+                    expanded_text=alternatives.minimal.expanded_text,
+                    explanation=alternatives.minimal.explanation
+                ),
+                poetic=ScriptExpansion(
+                    expanded_text=alternatives.poetic.expanded_text,
+                    explanation=alternatives.poetic.explanation
+                ),
+                humorous=ScriptExpansion(
+                    expanded_text=alternatives.humorous.expanded_text,
+                    explanation=alternatives.humorous.explanation
+                )
+            )
+            
+        except Exception as e:
+            db.rollback()
+            logger.error(f"Error generating expansion alternatives: {str(e)}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Error generating expansion alternatives: {str(e)}"
+            )
+
+    @staticmethod
+    def apply_expansion_alternative(
+        db: Session, 
+        component_id: UUID, 
+        expanded_text: str,
+        user_id: UUID
+    ) -> Dict[str, Any]:
+        """
+        Apply a selected expansion alternative to a component and record the selection.
+        Only updates if the content would change and only records selection if different from current.
+        
+        Args:
+            db: Database session
+            component_id: ID of the component to update
+            expanded_text: Text of the selected expansion to apply
+            user_id: ID of the user making the selection
+            
+        Returns:
+            Dictionary with updated component and status information
+            
+        Raises:
+            HTTPException: If component or alternative not found, or on database error
+        """
+        def _get_status_message(is_already_applied: bool, is_same_selection: bool) -> str:
+            """Generate an appropriate status message based on what happened."""
+            if is_already_applied and is_same_selection:
+                return "This alternative is already applied and was previously selected."
+            elif is_already_applied:
+                return "This alternative was already applied, but your selection has been recorded."
+            elif is_same_selection:
+                return "Component content updated, but this selection type was already recorded."
+            else:
+                return "Alternative successfully applied and recorded."
+        
+        # Find the component
+        component = db.query(SceneSegmentComponent).filter(
+            and_(
+                SceneSegmentComponent.id == component_id,
+                SceneSegmentComponent.is_deleted.is_(False)
+            )
+        ).first()
+        
+        if not component:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Component not found"
+            )
+        
+        # Get the specific alternative
+        alternative = db.query(ExpansionAlternative).filter(
+            and_(
+                ExpansionAlternative.component_id == component_id,
+                ExpansionAlternative.expanded_text == expanded_text,
+                ExpansionAlternative.is_deleted.is_(False)
+            )
+        ).first()
+        
+        if not alternative:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Alternative with the provided expanded text not found"
+            )
+        
+        try:
+            # Check if the component already has this alternative's content
+            is_already_applied = component.content == alternative.expanded_text
+            
+            # Get the most recent selection for this component (if any)
+            latest_selection = db.query(ExpansionSelectionHistory).filter(
+                ExpansionSelectionHistory.component_id == component_id
+            ).order_by(
+                ExpansionSelectionHistory.selected_at.desc()
+            ).first()
+            
+            is_same_selection = False
+            if latest_selection and latest_selection.alternative_type == alternative.alternative_type:
+                is_same_selection = True
+                
+            # Only update and record if something would change
+            if not is_already_applied:
+                # Update the component with the selected alternative's text
+                component.content = alternative.expanded_text
+                component.updated_at = func.now()
+            
+            # Only add to history if this is a different selection than the most recent one
+            if not is_same_selection:
+                # Record this selection in the history table
+                selection_history = ExpansionSelectionHistory(
+                    user_id=user_id,
+                    component_id=component_id,
+                    alternative_id=alternative.id,
+                    alternative_type=alternative.alternative_type
+                )
+                db.add(selection_history)
+            
+            db.commit()
+            
+            if not is_already_applied:
+                db.refresh(component)
+            
+            return {
+                "component": component,
+                "was_updated": not is_already_applied,
+                "was_recorded": not is_same_selection,
+                "message": _get_status_message(is_already_applied, is_same_selection)
+            }
+        except Exception as e:
+            db.rollback()
+            logger.error(f"Error applying expanded text: {str(e)}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Error applying expanded text: {str(e)}"
+            )
+        
+    @staticmethod
+    def continue_component(db: Session, component_id: UUID) -> Dict[str, Any]:
+        """
+        Continue a component's content using AI while maintaining its meaning and style.
+        Returns multiple alternative themed continuations.
+        """
+        # Get the component with validation
+        component = db.query(SceneSegmentComponent).filter(
+            and_(
+                SceneSegmentComponent.id == component_id,
+                SceneSegmentComponent.is_deleted.is_(False)
+            )
+        ).first()
+        
+        if not component:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Component not found"
+            )
+        
+        # Only allow continuation for supported component types
+        if component.component_type not in [ComponentType.ACTION, ComponentType.DIALOGUE]:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Cannot continue component of type {component.component_type}"
+            )
+        
+        # Get segment for context
+        segment = db.query(SceneSegment).filter(
+            SceneSegment.id == component.scene_segment_id
+        ).first()
+        if not segment:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Parent segment not found"
+            )
+        
+        # Get script for genre information
+        script = db.query(Script).filter(Script.id == segment.script_id).first()
+        if not script:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Script not found"
+            )
+        
+        # Get additional character context if available
+        character_traits = ""
+        if component.component_type == ComponentType.DIALOGUE and component.character_name:
+            # Here you could potentially look up character information from a character database
+            # For now, we'll leave it blank or could derive from previous dialogues
+            pass
+        
+        # Initialize OpenAI service
+        openai_service = AzureOpenAIService()
+        
+        # Process based on component type
+        try:
+            if component.component_type == ComponentType.ACTION:
+                alternatives = openai_service.continue_action_component(
+                    text=component.content,
+                    context={
+                        "genre": script.genre,
+                        "script_title": script.title
+                    }
+                )
+            elif component.component_type == ComponentType.DIALOGUE:
+                alternatives = openai_service.continue_dialogue_component(
+                    text=component.content,
+                    character_name=component.character_name,
+                    context={
+                        "genre": script.genre,
+                        "script_title": script.title,
+                        "parenthetical": component.parenthetical,
+                        "character_traits": character_traits
+                    }
+                )
+            
+            # Delete any existing alternatives
+            db.query(ContinuationAlternative).filter(
+                ContinuationAlternative.component_id == component_id
+            ).delete(synchronize_session=False)
+            
+            # Store themed alternatives in database
+            db_alternatives = []
+            
+            # Concise alternative
+            concise = ContinuationAlternative(
+                component_id=component_id,
+                alternative_type=ContinuationAlternativeType.CONCISE,
+                continuation_text=alternatives.concise.continuation_text,
+                explanation=alternatives.concise.explanation
+            )
+            db.add(concise)
+            db_alternatives.append((ContinuationAlternativeType.CONCISE, concise))
+            
+            # Dramatic alternative
+            dramatic = ContinuationAlternative(
+                component_id=component_id,
+                alternative_type=ContinuationAlternativeType.DRAMATIC,
+                continuation_text=alternatives.dramatic.continuation_text,
+                explanation=alternatives.dramatic.explanation
+            )
+            db.add(dramatic)
+            db_alternatives.append((ContinuationAlternativeType.DRAMATIC, dramatic))
+            
+            # Minimal alternative
+            minimal = ContinuationAlternative(
+                component_id=component_id,
+                alternative_type=ContinuationAlternativeType.MINIMAL,
+                continuation_text=alternatives.minimal.continuation_text,
+                explanation=alternatives.minimal.explanation
+            )
+            db.add(minimal)
+            db_alternatives.append((ContinuationAlternativeType.MINIMAL, minimal))
+            
+            # Poetic alternative
+            poetic = ContinuationAlternative(
+                component_id=component_id,
+                alternative_type=ContinuationAlternativeType.POETIC,
+                continuation_text=alternatives.poetic.continuation_text,
+                explanation=alternatives.poetic.explanation
+            )
+            db.add(poetic)
+            db_alternatives.append((ContinuationAlternativeType.POETIC, poetic))
+            
+            # Humorous alternative
+            humorous = ContinuationAlternative(
+                component_id=component_id,
+                alternative_type=ContinuationAlternativeType.HUMOROUS,
+                continuation_text=alternatives.humorous.continuation_text,
+                explanation=alternatives.humorous.explanation
+            )
+            db.add(humorous)
+            db_alternatives.append((ContinuationAlternativeType.HUMOROUS, humorous))
+            
+            db.commit()
+            
+            # Create response object
+            return ContinueComponentResponse(
+                component_id=component_id,
+                original_text=component.content,
+                concise=ScriptContinuation(
+                    continuation_text=alternatives.concise.continuation_text,
+                    explanation=alternatives.concise.explanation
+                ),
+                dramatic=ScriptContinuation(
+                    continuation_text=alternatives.dramatic.continuation_text,
+                    explanation=alternatives.dramatic.explanation
+                ),
+                minimal=ScriptContinuation(
+                    continuation_text=alternatives.minimal.continuation_text,
+                    explanation=alternatives.minimal.explanation
+                ),
+                poetic=ScriptContinuation(
+                    continuation_text=alternatives.poetic.continuation_text,
+                    explanation=alternatives.poetic.explanation
+                ),
+                humorous=ScriptContinuation(
+                    continuation_text=alternatives.humorous.continuation_text,
+                    explanation=alternatives.humorous.explanation
+                )
+            )
+            
+        except Exception as e:
+            db.rollback()
+            logger.error(f"Error generating continuation alternatives: {str(e)}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Error generating continuation alternatives: {str(e)}"
+            )
+
+    @staticmethod
+    def apply_continuation_alternative(
+        db: Session, 
+        component_id: UUID, 
+        continuation_text: str,
+        user_id: UUID
+    ) -> Dict[str, Any]:
+        """
+        Apply a selected continuation alternative to a component and record the selection.
+        The continuation is appended to the existing content rather than replacing it.
+        
+        Args:
+            db: Database session
+            component_id: ID of the component to update
+            continuation_text: Text of the selected continuation to apply
+            user_id: ID of the user making the selection
+            
+        Returns:
+            Dictionary with updated component and status information
+        """
+        def _get_status_message(is_already_applied: bool, is_same_selection: bool) -> str:
+            """Generate an appropriate status message based on what happened."""
+            if is_already_applied and is_same_selection:
+                return "This continuation is already applied and was previously selected."
+            elif is_already_applied:
+                return "This continuation was already applied, but your selection has been recorded."
+            elif is_same_selection:
+                return "Component content updated, but this selection type was already recorded."
+            else:
+                return "Continuation successfully applied and recorded."
+        
+        # Find the component
+        component = db.query(SceneSegmentComponent).filter(
+            and_(
+                SceneSegmentComponent.id == component_id,
+                SceneSegmentComponent.is_deleted.is_(False)
+            )
+        ).first()
+        
+        if not component:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Component not found"
+            )
+        
+        # Get the specific alternative
+        alternative = db.query(ContinuationAlternative).filter(
+            and_(
+                ContinuationAlternative.component_id == component_id,
+                ContinuationAlternative.continuation_text == continuation_text,
+                ContinuationAlternative.is_deleted.is_(False)
+            )
+        ).first()
+        
+        if not alternative:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Continuation alternative not found"
+            )
+        
+        try:
+            # For continuation, we need to check if the continuation has already been applied
+            # by checking if the component content ends with the continuation text
+            is_already_applied = component.content.endswith(continuation_text)
+            
+            # Get the most recent selection for this component (if any)
+            latest_selection = db.query(ContinuationSelectionHistory).filter(
+                ContinuationSelectionHistory.component_id == component_id
+            ).order_by(
+                ContinuationSelectionHistory.selected_at.desc()
+            ).first()
+            
+            is_same_selection = False
+            if latest_selection and latest_selection.alternative_type == alternative.alternative_type:
+                is_same_selection = True
+                
+            # Only update if the continuation hasn't been applied yet
+            if not is_already_applied:
+                # For continuation, we append the text rather than replace it
+                # Add a space between if needed
+                if component.content and not component.content.endswith((" ", "\n")):
+                    component.content = f"{component.content} {continuation_text}"
+                else:
+                    component.content = f"{component.content}{continuation_text}"
+                    
+                component.updated_at = func.now()
+            
+            # Only add to history if this is a different selection than the most recent one
+            if not is_same_selection:
+                # Record this selection in the history table
+                selection_history = ContinuationSelectionHistory(
+                    user_id=user_id,
+                    component_id=component_id,
+                    alternative_id=alternative.id,
+                    alternative_type=alternative.alternative_type
+                )
+                db.add(selection_history)
+            
+            db.commit()
+            
+            if not is_already_applied:
+                db.refresh(component)
+            
+            return {
+                "component": component,
+                "was_updated": not is_already_applied,
+                "was_recorded": not is_same_selection,
+                "message": _get_status_message(is_already_applied, is_same_selection)
+            }
+        except Exception as e:
+            db.rollback()
+            logger.error(f"Error applying continuation: {str(e)}")
+            logger.error(traceback.format_exc())
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Error applying continuation: {str(e)}"
+            )

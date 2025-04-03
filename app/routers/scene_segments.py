@@ -31,9 +31,10 @@ from app.services.scene_segment_ai_service import SceneSegmentAIService
 from app.schemas.scene_segment_ai import (SceneSegmentGenerationResponse, 
                                           ScriptSceneGenerationRequestUser, 
                                           AISceneSegmentGenerationResponse,
-                                          ShortenComponentResponse,
-                                          ApplyShortenedTextRequest,
-                                          ApplyShortenedTextResponse
+                                          ShortenComponentResponse, ApplyShortenedTextRequest, ApplyShortenedTextResponse,
+                                          RewriteComponentResponse, ApplyRewriteTextResponse, ApplyRewriteTextRequest,
+                                          ApplyExpandedTextRequest, ApplyExpandedTextResponse, ExpandComponentResponse,
+                                          ApplyContinuationRequest, ApplyContinuationResponse, ContinueComponentResponse,
                                           )
 
 
@@ -428,5 +429,132 @@ async def apply_shortened_text(
         db=db,
         component_id=component_id,
         alternative_text=request.shortened_text,
+        user_id=current_user.id
+    )
+
+
+@router.post("/components/{component_id}/rewrite", response_model=RewriteComponentResponse)
+async def rewrite_component(
+    component_id: UUID,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Generate multiple rewritten alternatives for a component's content using AI.
+    Works for both ACTION and DIALOGUE components.
+    
+    Each alternative has a different thematic style (concise, dramatic, minimal, poetic, humorous)
+    while maintaining the essential meaning of the original text.
+    
+    Returns:
+        RewriteComponentResponse: Original text and themed alternatives with explanations
+    """
+    return SceneSegmentAIService.rewrite_component(db, component_id)
+
+
+@router.post("/components/{component_id}/apply-rewrite", response_model=ApplyRewriteTextResponse)
+async def apply_rewrite_text(
+    component_id: UUID,
+    request: ApplyRewriteTextRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Apply a selected rewritten text to the component.
+    Records the selection for analytics and tracking purposes.
+    
+    Args:
+        component_id: The ID of the component to update
+        request: Contains the selected rewritten text to apply
+        
+    Returns:
+        ApplyRewriteTextResponse: Status of the update operation with the updated component
+    """
+    # Call the service method to handle the business logic
+    ai_service = SceneSegmentAIService()
+    return ai_service.apply_rewrite_alternative(
+        db=db,
+        component_id=component_id,
+        rewritten_text=request.rewritten_text,
+        user_id=current_user.id
+    )
+
+
+@router.post("/components/{component_id}/expand", response_model=ExpandComponentResponse)
+async def expand_component(
+    component_id: UUID,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Generate multiple expanded alternatives for a component's content using AI.
+    Works for both ACTION and DIALOGUE components.
+    """
+    return SceneSegmentAIService.expand_component(db, component_id)
+
+
+@router.post("/components/{component_id}/apply-expanded", response_model=ApplyExpandedTextResponse)
+async def apply_expanded_text(
+    component_id: UUID,
+    request: ApplyExpandedTextRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Apply a selected expanded text to the component.
+    Records the selection for analytics and tracking purposes.
+    """
+    # Call the service method to handle the business logic
+    ai_service = SceneSegmentAIService()
+    return ai_service.apply_expansion_alternative(
+        db=db,
+        component_id=component_id,
+        expanded_text=request.expanded_text,
+        user_id=current_user.id
+    )
+
+@router.post("/components/{component_id}/continue", response_model=ContinueComponentResponse)
+async def continue_component(
+    component_id: UUID,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Generate multiple AI-assisted continuations for a component's content.
+    Works for both ACTION and DIALOGUE components.
+    
+    Each alternative has a different thematic style (concise, dramatic, minimal, poetic, humorous)
+    while maintaining the essential meaning and flow from the original text.
+    
+    Returns:
+        ContinueComponentResponse: Original text and themed continuation alternatives with explanations
+    """
+    return SceneSegmentAIService.continue_component(db, component_id)
+
+
+@router.post("/components/{component_id}/apply-continuation", response_model=ApplyContinuationResponse)
+async def apply_continuation(
+    component_id: UUID,
+    request: ApplyContinuationRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Apply a selected continuation to a component, appending it to the existing content.
+    Records the selection for analytics and tracking purposes.
+    
+    Args:
+        component_id: The ID of the component to update
+        request: Contains the selected continuation text to apply
+        
+    Returns:
+        ApplyContinuationResponse: Status of the update operation with the updated component
+    """
+    # Call the service method to handle the business logic
+    ai_service = SceneSegmentAIService()
+    return ai_service.apply_continuation_alternative(
+        db=db,
+        component_id=component_id,
+        continuation_text=request.continuation_text,
         user_id=current_user.id
     )

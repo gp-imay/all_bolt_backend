@@ -66,6 +66,10 @@ class SceneSegmentComponent(UUIDModel, SoftDeleteMixin):
     # Relationships
     scene_segment = relationship("SceneSegment", back_populates="components")
     shortening_alternatives = relationship("ShorteningAlternative", back_populates="component", cascade="all, delete-orphan")
+    rewrite_alternatives = relationship("RewriteAlternative", back_populates="component", cascade="all, delete-orphan")
+    expansion_alternatives = relationship("ExpansionAlternative", back_populates="component", cascade="all, delete-orphan")
+    continuation_alternatives = relationship("ContinuationAlternative", back_populates="component", cascade="all, delete-orphan")
+
 
 
     __table_args__ = (
@@ -113,3 +117,126 @@ class ShorteningSelectionHistory(UUIDModel):
     user = relationship("User")
     component = relationship("SceneSegmentComponent")
     alternative = relationship("ShorteningAlternative")
+
+
+class RewriteAlternative(UUIDModel, SoftDeleteMixin):
+    """
+    Stores AI-generated rewriting alternatives for a component.
+    """
+    __tablename__ = "rewrite_alternatives"
+
+    component_id = Column(UUID(as_uuid=True), ForeignKey("scene_segment_components.id", ondelete="CASCADE"), nullable=False)
+    alternative_type = Column(Text, nullable=True)
+    rewritten_text = Column(Text, nullable=False)
+    explanation = Column(Text, nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    
+    # Relationship
+    component = relationship("SceneSegmentComponent", back_populates="rewrite_alternatives")
+    
+    __table_args__ = (
+        UniqueConstraint('component_id', 'alternative_type', name='unique_rewrite_alternative_type_per_component'),
+    )
+
+
+class RewriteSelectionHistory(UUIDModel):
+    """
+    Records each time a user selects and applies a rewrite alternative.
+    Provides analytics data on which alternative types are preferred.
+    """
+    __tablename__ = "rewrite_selection_history"
+
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    component_id = Column(UUID(as_uuid=True), ForeignKey("scene_segment_components.id", ondelete="CASCADE"), nullable=False)
+    alternative_id = Column(UUID(as_uuid=True), ForeignKey("rewrite_alternatives.id", ondelete="CASCADE"), nullable=False)
+    alternative_type = Column(Text, nullable=False)
+    selected_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False, index=True)
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    
+    # Relationships
+    user = relationship("User")
+    component = relationship("SceneSegmentComponent")
+    alternative = relationship("RewriteAlternative")
+
+# Add after the ShorteningAlternative model
+class ExpansionAlternative(UUIDModel, SoftDeleteMixin):
+    """
+    Stores AI-generated expansion alternatives for a component.
+    """
+    __tablename__ = "expansion_alternatives"
+
+    component_id = Column(UUID(as_uuid=True), ForeignKey("scene_segment_components.id", ondelete="CASCADE"), nullable=False)
+    alternative_type = Column(Text, nullable=True)
+    expanded_text = Column(Text, nullable=False)
+    explanation = Column(Text, nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    
+    # Relationship
+    component = relationship("SceneSegmentComponent", back_populates="expansion_alternatives")
+    
+    __table_args__ = (
+        UniqueConstraint('component_id', 'alternative_type', name='unique_expansion_alternative_type_per_component'),
+    )
+
+# Add after the ShorteningSelectionHistory model
+class ExpansionSelectionHistory(UUIDModel):
+    """
+    Records each time a user selects and applies an expansion alternative.
+    Provides analytics data on which alternative types are preferred.
+    """
+    __tablename__ = "expansion_selection_history"
+
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    component_id = Column(UUID(as_uuid=True), ForeignKey("scene_segment_components.id", ondelete="CASCADE"), nullable=False)
+    alternative_id = Column(UUID(as_uuid=True), ForeignKey("expansion_alternatives.id", ondelete="CASCADE"), nullable=False)
+    alternative_type = Column(Text, nullable=False)
+    selected_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False, index=True)
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    
+    # Relationships
+    user = relationship("User")
+    component = relationship("SceneSegmentComponent")
+    alternative = relationship("ExpansionAlternative")
+
+
+class ContinuationAlternative(UUIDModel, SoftDeleteMixin):
+    """
+    Stores AI-generated continuation alternatives for a component.
+    """
+    __tablename__ = "continuation_alternatives"
+
+    component_id = Column(UUID(as_uuid=True), ForeignKey("scene_segment_components.id", ondelete="CASCADE"), nullable=False)
+    alternative_type = Column(Text, nullable=True)
+    continuation_text = Column(Text, nullable=False)
+    explanation = Column(Text, nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    
+    # Relationship
+    component = relationship("SceneSegmentComponent", back_populates="continuation_alternatives")
+    
+    __table_args__ = (
+        UniqueConstraint('component_id', 'alternative_type', name='unique_continuation_alternative_type_per_component'),
+    )
+
+
+class ContinuationSelectionHistory(UUIDModel):
+    """
+    Records each time a user selects and applies a continuation alternative.
+    Provides analytics data on which continuation types are preferred.
+    """
+    __tablename__ = "continuation_selection_history"
+
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    component_id = Column(UUID(as_uuid=True), ForeignKey("scene_segment_components.id", ondelete="CASCADE"), nullable=False)
+    alternative_id = Column(UUID(as_uuid=True), ForeignKey("continuation_alternatives.id", ondelete="CASCADE"), nullable=False)
+    alternative_type = Column(Text, nullable=False)
+    selected_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False, index=True)
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    
+    # Relationships
+    user = relationship("User")
+    component = relationship("SceneSegmentComponent")
+    alternative = relationship("ContinuationAlternative")
