@@ -24,7 +24,8 @@ from app.schemas.scene_segment_ai import (GeneratedSceneSegment, SceneSegmentGen
                                       ShorteningAlternativeType, ShortenComponentResponse, ScriptRewrite,ScriptShorten,
                                       RewriteComponentResponse, RewriteAlternativeType,
                                       ExpandComponentResponse, ExpansionAlternativeType, ScriptExpansion,
-                                      ContinueComponentResponse, ContinuationAlternativeType,ScriptContinuation)
+                                      ContinueComponentResponse, ContinuationAlternativeType,ScriptContinuation,
+                                      TransformationType)
 from app.schemas.scene_segment import ComponentUpdate
 
 
@@ -313,7 +314,7 @@ class SceneSegmentAIService:
                 min_word_count=min_word_count,
                 previous_scenes=previous_scenes
             )
-            
+            logger.info("\n\n", "*"*100,generated_segment, "*"*100,"\n\n")
             # Get the next available segment number
             next_segment_number = SceneSegmentService.fetch_next_segment_number(db, script_id)
             if next_segment_number is None:
@@ -338,9 +339,10 @@ class SceneSegmentAIService:
                     component_data["character_name"] = comp.character_name
                     component_data["parenthetical"] = comp.parenthetical
                 
+
                 component_create = ComponentCreate(**component_data)
                 component_models.append(component_create)
-            
+            logger.info("\n\n", "*"*100,component_models, "*"*100,"\n\n")
             # Create segment
             from app.schemas.scene_segment import SceneSegmentCreate
             segment_create = SceneSegmentCreate(
@@ -1709,4 +1711,72 @@ class SceneSegmentAIService:
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail=f"Error applying continuation: {str(e)}"
+            )
+        
+    @staticmethod
+    def transform_component(
+        db: Session, 
+        component_id: UUID, 
+        transform_type: TransformationType
+    ) -> Dict[str, Any]:
+        """
+        Unified method for component transformations (shortening, rewriting, expanding)
+        """
+        if transform_type == TransformationType.SHORTEN:
+            return SceneSegmentAIService.shorten_component(db, component_id)
+        elif transform_type == TransformationType.REWRITE:
+            return SceneSegmentAIService.rewrite_component(db, component_id)
+        elif transform_type == TransformationType.EXPAND:
+            return SceneSegmentAIService.applu(db, component_id)
+        elif transform_type == TransformationType.CONTINUE:
+            return SceneSegmentAIService.apply_continuation_alternative(db, component_id)
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Unsupported transformation type: {transform_type}"
+            )
+        
+    @staticmethod
+    def apply_transformation(
+        db: Session,
+        component_id: UUID,
+        transform_type: TransformationType,
+        alternative_text: str,
+        user_id: UUID
+    ) -> Dict[str, Any]:
+        """
+        Unified method for applying transformations
+        """
+        if transform_type == TransformationType.SHORTEN:
+            return SceneSegmentAIService.apply_shortening_alternative(
+                db=db,
+                component_id=component_id,
+                alternative_text=alternative_text,
+                user_id=user_id
+            )
+        elif transform_type == TransformationType.REWRITE:
+            return SceneSegmentAIService.apply_rewrite_alternative(
+                db=db,
+                component_id=component_id,
+                rewritten_text=alternative_text,
+                user_id=user_id
+            )
+        elif transform_type == TransformationType.EXPAND:
+            return SceneSegmentAIService.apply_expansion_alternative(
+                db=db,
+                component_id=component_id,
+                expanded_text=alternative_text,
+                user_id=user_id
+            )
+        elif transform_type == TransformationType.CONTINUE:
+            return SceneSegmentAIService.apply_continuation_alternative(
+                db=db,
+                component_id=component_id,
+                continuation_text=alternative_text,
+                user_id=user_id
+            )
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Unsupported transformation type: {transform_type}"
             )

@@ -35,8 +35,8 @@ from app.schemas.scene_segment_ai import (SceneSegmentGenerationResponse,
                                           RewriteComponentResponse, ApplyRewriteTextResponse, ApplyRewriteTextRequest,
                                           ApplyExpandedTextRequest, ApplyExpandedTextResponse, ExpandComponentResponse,
                                           ApplyContinuationRequest, ApplyContinuationResponse, ContinueComponentResponse,
+                                          ApplyTransformRequest
                                           )
-
 
 from app.models import scene_segments
 
@@ -558,3 +558,32 @@ async def apply_continuation(
         continuation_text=request.continuation_text,
         user_id=current_user.id
     )
+
+@router.post("/components/{component_id}/apply-transform")
+async def apply_transform(
+    component_id: UUID,
+    request: ApplyTransformRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Unified endpoint for applying a selected transformation to a component.
+    Records the selection in the appropriate history table.
+    """
+    result = SceneSegmentAIService.apply_transformation(
+        db=db,
+        component_id=component_id,
+        transform_type=request.transform_type,
+        alternative_text=request.alternative_text,
+        user_id=current_user.id
+    )
+    
+    # For backward compatibility, ensure consistent response structure
+    if "component" in result:
+        return {
+            "component": result["component"],
+            "was_updated": result.get("was_updated", True),
+            "was_recorded": result.get("was_recorded", True),
+            "message": result.get("message", "Transformation applied successfully")
+        }
+    return result

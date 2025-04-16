@@ -281,3 +281,19 @@ class ApplyContinuationResponse(BaseModel):
     was_updated: bool
     was_recorded: bool
     message: str
+
+
+
+
+class TransformationType(str, Enum):
+    SHORTEN = "shorten"
+    REWRITE = "rewrite"
+    EXPAND = "expand"
+    CONTINUE = "continue"
+
+class TransformRequest(BaseModel):
+    transform_type: TransformationType = Field(..., description="Type of transformation to apply")
+    
+class ApplyTransformRequest(BaseModel):
+    transform_type: TransformationType = Field(..., description="Type of transformation that was applied")
+    alternative_text: str = Field(..., description="The selected alternative text to apply")

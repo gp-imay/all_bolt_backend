@@ -171,6 +171,10 @@ class SceneSegmentService:
         # Apply pagination and ordering
         segments = query.order_by(SceneSegment.segment_number).offset(skip).limit(limit).all()
         
+        for segment in segments:
+            segment.components = [comp for comp in segment.components if not comp.is_deleted]
+
+        
         return segments, total
 
     @staticmethod
