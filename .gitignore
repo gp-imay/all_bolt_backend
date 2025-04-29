@@ -4,6 +4,7 @@
 ### Python ###
 # Byte-compiled / optimized / DLL files
 .env
+.env.analytics
 fastapi_server.py
 __pycache__/
 *.py[cod]

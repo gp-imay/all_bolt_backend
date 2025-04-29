@@ -1,6 +1,6 @@
 # app/schemas/scene_segment.py
 from pydantic import BaseModel, UUID4, Field, validator
-from typing import List, Optional, Dict
+from typing import List, Optional, Dict, Any
 from datetime import datetime
 from enum import Enum
 
@@ -16,7 +16,7 @@ class ComponentType(str, Enum):
 class ComponentBase(BaseModel):
     component_type: ComponentType
     position: float = Field(..., description="Position of this component within the segment")
-    content: str = Field(..., min_length=1, description="Text content of the component")
+    content: str = Field(..., description="Text content of the component")
     character_name: Optional[str] = Field(None, description="Character name for DIALOGUE components")
     parenthetical: Optional[str] = Field(None, description="Parenthetical direction for DIALOGUE components")
     
@@ -129,17 +129,142 @@ class ComponentChange(BaseModel):
     character_name: Optional[str] = None
     parenthetical: Optional[str] = None
 
-class ScriptChangesRequest(BaseModel):
-    changedSegments: Dict[str, List[ComponentChange]]
-    deletedElements: List[str] = []  # Component IDs to delete
-    deletedSegments: List[str] = []  # Segment IDs to delete
+class NewComponentForSegment(BaseModel):
+    """A new component to be created within a new segment"""
+    component_type: ComponentType
+    position: float
+    content: str
+    character_name: Optional[str] = None
+    parenthetical: Optional[str] = None
+    frontendId  : str = Field(..., description="Temporary frontend ID for the component")
 
+class NewSegment(BaseModel):
+    """A new segment to be created with its components"""
+    segmentNumber: float
+    beatId: Optional[str] = None
+    sceneDescriptionId: Optional[str] = None
+    frontendId: str = Field(..., description="Temporary frontend ID for the segment")
+    components: List[NewComponentForSegment] = []
+
+class NewComponentForExistingSegment(BaseModel):
+    """A new component to be added to an existing segment"""
+    segment_id: str
+    component_type: ComponentType
+    position: float
+    content: str
+    character_name: Optional[str] = None
+    parenthetical: Optional[str] = None
+    frontendId: str = Field(..., description="Temporary frontend ID for the component")
+
+class ScriptChangesRequest(BaseModel):
+    """
+    Comprehensive payload for syncing script changes in a single transaction.
+    Supports both FROM_SCRATCH and WITH_AI creation methods.
+    """
+    # Existing components that were modified (by segment)
+    changedSegments: Dict[str, List[ComponentChange]] = {}
+    
+    # IDs of elements and segments to delete
+    deletedElements: List[str] = []
+    deletedSegments: List[str] = []
+    
+    # New segments with their components
+    newSegments: List[NewSegment] = []
+    
+    # New components to add to existing segments
+    newComponentsInExistingSegments: List[NewComponentForExistingSegment] = []
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "changedSegments": {
+                    "123e4567-e89b-12d3-a456-426614174000": [
+                        {
+                            "id": "123e4567-e89b-12d3-a456-426614174001",
+                            "component_type": "DIALOGUE",
+                            "position": 1000.0,
+                            "content": "Updated dialogue text",
+                            "character_name": "JOHN"
+                        }
+                    ]
+                },
+                "deletedElements": ["123e4567-e89b-12d3-a456-426614174002"],
+                "deletedSegments": ["123e4567-e89b-12d3-a456-426614174003"],
+                "newSegments": [
+                    {
+                        "segmentNumber": 5000.0,
+                        "beatId": "123e4567-e89b-12d3-a456-426614174004",
+                        "sceneDescriptionId": "123e4567-e89b-12d3-a456-426614174005",
+                        "frontendId": "temp-seg-abc123",
+                        "components": [
+                            {
+                                "component_type": "HEADING",
+                                "position": 1000.0,
+                                "content": "INT. LIVING ROOM - DAY",
+                                "frontendId": "temp-el-xyz789"
+                            },
+                            {
+                                "component_type": "ACTION",
+                                "position": 2000.0,
+                                "content": "John enters the room, looking tired.",
+                                "frontendId": "temp-el-def456"
+                            }
+                        ]
+                    }
+                ],
+                "newComponentsInExistingSegments": [
+                    {
+                        "segment_id": "123e4567-e89b-12d3-a456-426614174006",
+                        "component_type": "DIALOGUE",
+                        "position": 3000.0,
+                        "content": "I can't believe this happened.",
+                        "character_name": "JANE",
+                        "frontendId": "temp-el-ghi789"
+                    }
+                ]
+            }
+        }
+
+
+
+class IdMappings(BaseModel):
+    """Mapping of frontend temporary IDs to backend-generated UUIDs"""
+    segments: Dict[str, str] = Field(default_factory=dict, description="Maps frontend segment IDs to backend UUIDs")
+    components: Dict[str, str] = Field(default_factory=dict, description="Maps frontend component IDs to backend UUIDs")
 
 class ScriptChangesResponse(BaseModel):
+    """
+    Response from the script changes endpoint with detailed counts
+    of the operations performed and ID mappings for new elements.
+    """
     success: bool
     message: str
     updated_components: int
     deleted_components: int
-
-
-
+    deleted_segments: int
+    created_segments: int = 0
+    created_components: int = 0
+    idMappings: IdMappings = Field(default_factory=IdMappings)
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "success": True,
+                "message": "Script changes applied successfully",
+                "updated_components": 2,
+                "deleted_components": 1,
+                "deleted_segments": 0,
+                "created_segments": 1,
+                "created_components": 3,
+                "idMappings": {
+                    "segments": {
+                        "temp-seg-abc123": "550e8400-e29b-41d4-a716-446655440000"
+                    },
+                    "components": {
+                        "temp-el-xyz789": "550e8400-e29b-41d4-a716-446655440001",
+                        "temp-el-def456": "550e8400-e29b-41d4-a716-446655440002",
+                        "temp-el-ghi789": "550e8400-e29b-41d4-a716-446655440003"
+                    }
+                }
+            }
+        }

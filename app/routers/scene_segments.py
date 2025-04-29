@@ -37,7 +37,7 @@ from app.schemas.scene_segment_ai import (SceneSegmentGenerationResponse,
                                           ApplyContinuationRequest, ApplyContinuationResponse, ContinueComponentResponse,
                                           ApplyTransformRequest
                                           )
-
+from app.models.script import ScriptCreationMethod
 from app.models import scene_segments
 
 logger = logging.getLogger(__name__)
@@ -368,8 +368,8 @@ async def get_or_generate_first_segment(
     )
 
 
-@router.put("/{script_id}/changes", response_model=ScriptChangesResponse)
-async def update_script_changes(
+@router.put("/{script_id}/changes_old", response_model=ScriptChangesResponse)
+async def update_script_changes_old(
     script_id: UUID,
     changes: ScriptChangesRequest,
     current_user: User = Depends(get_current_user),
@@ -397,6 +397,59 @@ async def update_script_changes(
     
     return result
 
+@router.put("/{script_id}/changes", response_model=ScriptChangesResponse)
+async def update_script_changes(
+    script_id: UUID,
+    changes: ScriptChangesRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Apply multiple changes to script segments and components in a single operation.
+    
+    This endpoint handles:
+    - Updates to existing components
+    - Deletion of components and segments
+    - Creation of new segments with components
+    - Addition of new components to existing segments
+    
+    All changes are processed in a single transaction for consistency.
+    """
+    # Verify script exists and belongs to user
+    existing_script = ScriptService.get_script(db=db, script_id=script_id)
+    if existing_script.user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not authorized to modify this script"
+        )
+    
+    # Process the changes
+    result = SceneSegmentService.apply_script_changes(
+        db=db,
+        script_id=script_id,
+        changed_segments=changes.changedSegments,
+        deleted_elements=changes.deletedElements,
+        deleted_segments=changes.deletedSegments,
+        new_segments=changes.newSegments,
+        new_components_in_existing_segments=changes.newComponentsInExistingSegments
+    )
+    
+    # Update script progress if needed
+    if existing_script.creation_method in [ScriptCreationMethod.FROM_SCRATCH, ScriptCreationMethod.WITH_AI]:
+        # Calculate progress based on the number of segments, components, etc.
+        # This is a simplified example - you may want to develop a more sophisticated algorithm
+        total_segments = db.query(scene_segments.SceneSegment).filter(
+            scene_segments.SceneSegment.script_id == script_id,
+            scene_segments.SceneSegment.is_deleted.is_(False)
+        ).count()
+        
+        if total_segments > 0:
+            # Update progress (assuming more segments = more progress)
+            progress = min(int(total_segments * 5), 100)  # Cap at 100%
+            existing_script.script_progress = progress
+            db.commit()
+    
+    return result
 
 
 @router.post("/components/{component_id}/shorten", response_model=ShortenComponentResponse)
