@@ -802,10 +802,26 @@ class SceneSegmentService:
         script_id: UUID,
         changed_segments: Dict[str, List[Dict[str, Any]]],
         deleted_elements: List[str],
-        deleted_segments: List[str]
+        deleted_segments: List[str],
+        new_segments: Optional[List[Dict[str, Any]]] = None,
+        new_components_in_existing_segments: Optional[List[Dict[str, Any]]] = None
     ) -> Dict[str, Any]:
         """
         Apply multiple changes to script segments and components in a single transaction.
+        
+        Tracks and returns mappings from frontend temporary IDs to backend-generated UUIDs.
+        
+        Args:
+            db: Database session
+            script_id: ID of the script being modified
+            changed_segments: Dictionary of segment_id -> list of modified components
+            deleted_elements: List of component IDs to delete
+            deleted_segments: List of segment IDs to delete
+            new_segments: List of new segments with their components
+            new_components_in_existing_segments: List of new components to add to existing segments
+            
+        Returns:
+            Dictionary with success status, counts of changes, and ID mappings
         """
         try:
             # Verify script exists
@@ -816,11 +832,156 @@ class SceneSegmentService:
                     detail="Script not found"
                 )
             
+            # Initialize tracking counts
             updated_count = 0
             deleted_component_count = 0
             deleted_segment_count = 0
+            created_segment_count = 0
+            created_component_count = 0
             
-            # Process component updates by segment (if any)
+            # Initialize ID mapping dictionaries
+            segment_id_map = {}  # Maps frontend IDs to backend UUIDs for segments
+            component_id_map = {}  # Maps frontend IDs to backend UUIDs for components
+            
+            # 1. Process new segments (if any)
+            if new_segments:
+                logger.info(f"Processing {len(new_segments)} new segments")
+                for segment_data in new_segments:
+                    try:
+                        segment_data = segment_data.model_dump()
+                        # Create the scene segment
+                        segment_number = segment_data.get('segmentNumber')
+                        
+                        # Get the frontend ID for mapping
+                        frontend_segment_id = segment_data.get('frontendId')
+                        
+                        # Convert beat_id and scene_description_id to UUID if they're strings
+                        beat_id_str = segment_data.get('beatId')
+                        scene_description_id_str = segment_data.get('sceneDescriptionId')
+                        
+                        beat_id = UUID(beat_id_str) if beat_id_str and isinstance(beat_id_str, str) else beat_id_str
+                        scene_description_id = UUID(scene_description_id_str) if scene_description_id_str and isinstance(scene_description_id_str, str) else scene_description_id_str
+                        
+                        db_segment = SceneSegment(
+                            script_id=script_id,
+                            beat_id=beat_id,
+                            scene_description_id=scene_description_id,
+                            segment_number=segment_number
+                        )
+                        
+                        db.add(db_segment)
+                        db.flush()  # Get the ID without committing
+                        created_segment_count += 1
+                        
+                        # Store the ID mapping if frontend ID was provided
+                        if frontend_segment_id:
+                            segment_id_map[frontend_segment_id] = str(db_segment.id)
+                        
+                        # Process all components in the new segment
+                        if 'components' in segment_data:
+                            for comp_data in segment_data['components']:
+                                # comp_data = comp_data.model_dump()
+                                # Get the frontend ID for mapping
+                                frontend_component_id = comp_data.get('frontendId')
+                                
+                                # Create the component
+                                component_type = comp_data.get('component_type')
+                                position = comp_data.get('position')
+                                content = comp_data.get('content')
+                                character_name = comp_data.get('character_name')
+                                parenthetical = comp_data.get('parenthetical')
+                                
+                                db_component = SceneSegmentComponent(
+                                    scene_segment_id=db_segment.id,
+                                    component_type=component_type,
+                                    position=position,
+                                    content=content,
+                                    character_name=character_name,
+                                    parenthetical=parenthetical
+                                )
+                                
+                                db.add(db_component)
+                                db.flush()  # Get the ID without committing
+                                created_component_count += 1
+                                
+                                # Store the ID mapping if frontend ID was provided
+                                if frontend_component_id:
+                                    component_id_map[frontend_component_id] = str(db_component.id)
+                    
+                    except Exception as segment_error:
+                        logger.error(f"Error creating new segment: {str(segment_error)}")
+                        logger.error(traceback.format_exc())
+                        continue
+            
+            # 2. Process new components for existing segments (if any)
+            if new_components_in_existing_segments:
+                logger.info(f"Processing {len(new_components_in_existing_segments)} new components")
+                for comp_data in new_components_in_existing_segments:
+                    try:
+                        comp_data = comp_data.model_dump()
+                        # Get the frontend ID for mapping
+                        frontend_component_id = comp_data.get('frontendId')
+                        
+                        # Extract segment_id and convert to UUID if it's a string
+                        segment_id_str = comp_data.get('segment_id')
+                        if not segment_id_str:
+                            logger.warning(f"Missing segment_id in component data: {comp_data}")
+                            continue
+                        
+                        try:
+                            # Convert to UUID if it's a string
+                            segment_id = UUID(segment_id_str) if isinstance(segment_id_str, str) else segment_id_str
+                        except ValueError:
+                            logger.warning(f"Invalid segment ID format: {segment_id_str}")
+                            continue
+                        
+                        logger.info(f"Looking up segment with ID: {segment_id}")
+                        
+                        # Verify segment exists and belongs to this script
+                        segment = db.query(SceneSegment).filter(
+                            and_(
+                                SceneSegment.id == segment_id,
+                                SceneSegment.script_id == script_id,
+                                SceneSegment.is_deleted.is_(False)
+                            )
+                        ).first()
+                        
+                        if not segment:
+                            logger.warning(f"Segment not found or does not belong to script: {segment_id}")
+                            continue
+                        
+                        # Create the component
+                        component_type = comp_data.get('component_type')
+                        position = comp_data.get('position')
+                        content = comp_data.get('content')
+                        character_name = comp_data.get('character_name')
+                        parenthetical = comp_data.get('parenthetical')
+                        
+                        logger.info(f"Creating component: type={component_type}, content={content}")
+                        
+                        db_component = SceneSegmentComponent(
+                            scene_segment_id=segment_id,
+                            component_type=component_type,
+                            position=position,
+                            content=content,
+                            character_name=character_name,
+                            parenthetical=parenthetical
+                        )
+                        
+                        db.add(db_component)
+                        db.flush()  # Get the ID without committing
+                        created_component_count += 1
+                        
+                        # Store the ID mapping if frontend ID was provided
+                        if frontend_component_id:
+                            component_id_map[frontend_component_id] = str(db_component.id)
+                        
+                    except Exception as comp_error:
+                        logger.error(f"Error creating new component: {str(comp_error)}")
+                        logger.error(traceback.format_exc())
+                        continue
+            
+            # 3. Process component updates by segment (if any)
             if changed_segments:
                 for segment_id_str, components in changed_segments.items():
                     # Skip if no components to update
@@ -852,6 +1013,13 @@ class SceneSegmentService:
                             # Access fields directly
                             component_id = comp["id"] if isinstance(comp, dict) else comp.id
                             component_type = comp["component_type"] if isinstance(comp, dict) else comp.component_type
+                            
+                            # Convert component_id to UUID if it's a string
+                            try:
+                                component_id = UUID(component_id) if isinstance(component_id, str) else component_id
+                            except ValueError:
+                                logger.warning(f"Invalid component ID format: {component_id}")
+                                continue
                             
                             # Find the component
                             db_component = db.query(SceneSegmentComponent).filter(
@@ -909,7 +1077,7 @@ class SceneSegmentService:
                             logger.error(traceback.format_exc())
                             continue
             
-            # Process component deletions (if any)
+            # 4. Process component deletions (if any)
             if deleted_elements:
                 for component_id_str in deleted_elements:
                     try:
@@ -937,7 +1105,7 @@ class SceneSegmentService:
                     component.soft_delete()
                     deleted_component_count += 1
 
-            # Process segment deletions (if any)
+            # 5. Process segment deletions (if any)
             if deleted_segments:
                 for segment_id_str in deleted_segments:
                     try:
@@ -972,18 +1140,26 @@ class SceneSegmentService:
                     
                     for component in components:
                         component.soft_delete()
+                        deleted_component_count += 1
                     
                     deleted_segment_count += 1
             
             # Commit all changes in a single transaction
             db.commit()
             
+            # Prepare and return response with ID mappings
             return {
                 "success": True,
                 "message": "Script changes applied successfully",
                 "updated_components": updated_count,
                 "deleted_components": deleted_component_count,
-                "deleted_segments": deleted_segment_count
+                "deleted_segments": deleted_segment_count,
+                "created_segments": created_segment_count,
+                "created_components": created_component_count,
+                "idMappings": {
+                    "segments": segment_id_map,
+                    "components": component_id_map
+                }
             }
             
         except Exception as e:

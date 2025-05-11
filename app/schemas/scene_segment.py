@@ -131,7 +131,7 @@ class ComponentChange(BaseModel):
 
 class NewComponentForSegment(BaseModel):
     """A new component to be created within a new segment"""
-    component_type: ComponentType
+    component_type: ComponentTypeFE
     position: float
     content: str
     character_name: Optional[str] = None
