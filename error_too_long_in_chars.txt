@@ -1,1 +1,33 @@
 "500: Error creating scene segment: (psycopg2.errors.StringDataRightTruncation) value too long for type character varying(255)\n\n[SQL: INSERT INTO scene_segment_components (scene_segment_id, component_type, position, content, character_name, parenthetical, updated_at, id, deleted_at, is_deleted) VALUES (%(scene_segment_id__0)s::UUID, %(component_type__0)s, %(position__0)s, %(content ... 3716 characters truncated ... 17)s, %(is_deleted__17)s) RETURNING scene_segment_components.created_at, scene_segment_components.id]\n[parameters: {'id__0': UUID('1d162533-6c61-4aed-ad61-40003a1c54ad'), 'is_deleted__0': False, 'content__0': 'INT. URBAN COURTHOUSE - DAY', 'position__0': 1000.0, 'updated_at__0': None, 'parenthetical__0': None, 'scene_segment_id__0': UUID('947857b9-9924-4903-9368-c7129f06fd39'), 'deleted_at__0': None, 'character_name__0': None, 'component_type__0': 'HEADING', 'id__1': UUID('257f91e4-ec6d-4a43-aca5-7dc4d167d4a5'), 'is_deleted__1': False, 'content__1': 'The courtroom is a cauldron of chaos. Reporters clamor outside the heavy double doors, their cameras flashing intermittently through the narrow glass ... (96 characters truncated) ... ted debates and whispers. The air feels heavy with tension, as though every word spoken here could tip the fragile balance of a city already on edge.', 'position__1': 2000.0, 'updated_at__1': None, 'parenthetical__1': None, 'scene_segment_id__1': UUID('947857b9-9924-4903-9368-c7129f06fd39'), 'deleted_at__1': None, 'character_name__1': None, 'component_type__1': 'ACTION', 'id__2': UUID('05a65e60-546a-427b-a14e-3ca853e2db74'), 'is_deleted__2': False, 'content__2': 'A gavel slams repeatedly, its sound swallowed by the cacophony. JUDGE EVELYN KAPLAN, a sharp-eyed woman in her sixties, sits at the bench, her composure fraying. Her voice booms over the noise.', 'position__2': 3000.0, 'updated_at__2': None, 'parenthetical__2': None, 'scene_segment_id__2': UUID('947857b9-9924-4903-9368-c7129f06fd39'), 'deleted_at__2': None, 'character_name__2': None, 'component_type__2': 'ACTION', 'id__3': UUID('20a061d5-9206-4db2-81e1-4d615b754949'), 'is_deleted__3': False, 'content__3': 'JUDGE KAPLAN', 'position__3': 4000.0, 'updated_at__3': None, 'parenthetical__3': None, 'scene_segment_id__3': UUID('947857b9-9924-4903-9368-c7129f06fd39'), 'deleted_at__3': None, 'character_name__3': None, 'component_type__3': 'CHARACTER', 'id__4': UUID('7801902a-0811-4dee-8741-c36c44ebe0f7'), 'is_deleted__4': False, 'content__4': 'Order! I will have ORDER in my courtroom!', 'position__4': 5000.0, 'updated_at__4': None, 'parenthetical__4': None, 'scene_segment_id__4': UUID('947857b9-9924-4903-9368-c7129f06fd39'), 'deleted_at__4': None, 'character_name__4': 'JUDGE KAPLAN', 'component_type__4': 'DIALOGUE' ... 80 parameters truncated ... 'id__13': UUID('74d0777c-60de-4bdb-8c50-8ca55918ce7b'), 'is_deleted__13': False, 'content__13': 'ALEX', 'position__13': 14000.0, 'updated_at__13': None, 'parenthetical__13': None, 'scene_segment_id__13': UUID('947857b9-9924-4903-9368-c7129f06fd39'), 'deleted_at__13': None, 'character_name__13': None, 'component_type__13': 'CHARACTER', 'id__14': UUID('40f71043-7783-4f66-b7e9-f2b71269ea96'), 'is_deleted__14': False, 'content__14': 'They don’t need to listen, Megan—they need to hear.', 'position__14': 15000.0, 'updated_at__14': None, 'parenthetical__14': None, 'scene_segment_id__14': UUID('947857b9-9924-4903-9368-c7129f06fd39'), 'deleted_at__14': None, 'character_name__14': 'ALEX', 'component_type__14': 'DIALOGUE', 'id__15': UUID('45fcd19c-1684-4a07-af9b-573cf7df9b21'), 'is_deleted__15': False, 'content__15': 'Alex turns his gaze forward as Judge Kaplan glares down from the bench, her fingers tapping impatiently against her desk.', 'position__15': 16000.0, 'updated_at__15': None, 'parenthetical__15': None, 'scene_segment_id__15': UUID('947857b9-9924-4903-9368-c7129f06fd39'), 'deleted_at__15': None, 'character_name__15': None, 'component_type__15': 'ACTION', 'id__16': UUID('1dfbcdab-5e92-42e5-bd85-b966560b338e'), 'is_deleted__16': False, 'content__16': 'JUDGE KAPLAN', 'position__16': 17000.0, 'updated_at__16': None, 'parenthetical__16': None, 'scene_segment_id__16': UUID('947857b9-9924-4903-9368-c7129f06fd39'), 'deleted_at__16': None, 'character_name__16': None, 'component_type__16': 'CHARACTER', 'id__17': UUID('2985b2e2-b3d1-4260-a656-b95b6b892032'), 'is_deleted__17': False, 'content__17': \"'Enough delays! Mr. Griffin, are you prepared to proceed?' Reset completion pls directio positioning action segmentation duplic plan specific trail conflict exploration explic exploration expansive urban settings clearly detailed definition used!\", 'position__17': 18000.0, 'updated_at__17': None, 'parenthetical__17': 'gen interpla** ', 'scene_segment_id__17': UUID('947857b9-9924-4903-9368-c7129f06fd39'), 'deleted_at__17': None, 'character_name__17': 'equin underscore mpl useable mechanics as specific recre refine completion subset reuse interpl process attributes demdetailed configurations complet ... (156 characters truncated) ... en complexities complete guideline tools functionality situation structured trail balanced motivations too ls direct tools examples ends completion m', 'component_type__17': 'DIALOGUE'}]\n(Background on this error at: https://sqlalche.me/e/20/9h9h)"
+
+
+
+Error when character name is empty when the component is of type DIALOGUE
+
+{
+  "success": false,
+  "input_context": {
+    "script_id": "08789fca-64be-4cec-8729-a0371a7cc676",
+    "script_title": "This is us",
+    "genre": "Family, Drama, Society",
+    "beat_id": "0e851bdc-06b3-477f-a51e-9b0c321d5910",
+    "beat_title": "The Dynamics of Everyday Life",
+    "beat_position": 3,
+    "scene_description_id": "5ca6f257-7d56-446c-b177-a3616cd3056c",
+    "scene_title": "Lily's Garage Band Dreams",
+    "scene_description": "Lily rehearses passionately while the family overhears subtle concerns.",
+    "scene_position": 1,
+    "min_word_count": 750,
+    "previous_scenes": [
+      "Morning Chaos at Breakfast",
+      "Living Room Reflection",
+      "Park Bench Realization"
+    ]
+  },
+  "generated_segment": null,
+  "fountain_text": null,
+  "error": "1 validation error for ComponentCreate\ncharacter_name\n  Value error, character_name is required for DIALOGUE components [type=value_error, input_value=None, input_type=NoneType]\n    For further information visit https://errors.pydantic.dev/2.10/v/value_error",
+  "scene_segment_id": null,
+  "creation_method": "WITH_AI",
+  "message": "Failed to generate scene segment"
+}
