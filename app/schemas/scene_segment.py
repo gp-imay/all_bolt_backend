@@ -21,11 +21,11 @@ class ComponentBase(BaseModel):
     parenthetical: Optional[str] = Field(None, description="Parenthetical direction for DIALOGUE components")
     
     # Validator to ensure character_name is provided for DIALOGUE components
-    @validator('character_name')
-    def validate_character_name(cls, v, values):
-        if values.get('component_type') == ComponentType.DIALOGUE and not v:
-            raise ValueError('character_name is required for DIALOGUE components')
-        return v
+    # @validator('character_name')
+    # def validate_character_name(cls, v, values):
+    #     if values.get('component_type') == ComponentType.DIALOGUE and not v:
+    #         raise ValueError('character_name is required for DIALOGUE components')
+    #     return v
 
 
 class ComponentCreate(ComponentBase):
