@@ -24,6 +24,8 @@ pydantic-settings = "^2.7.1"
 azure-storage-blob = "^12.24.1"
 openai = "^1.63.2"
 instructor = "^1.7.2"
+razorpay = "1.4.2"
+setuptools = "^80.9.0"
 
 
 [build-system]
