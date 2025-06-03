@@ -75,6 +75,20 @@ class Settings(BaseSettings):
     ENVIRONMENT: str = "development"  # Can be "development", "staging", "production"
     ENABLE_TEST_ENDPOINTS: bool = False  # Specific flag for test endpoints
 
+    # Subscription settings
+    FREE_TIER_CALL_LIMIT: int = 6
+    FREE_TIER_RESET_INTERVAL: str = "annual"  # "annual" or "monthly"
+    
+    # Razorpay settings
+    # RAZORPAY_KEY_ID: str
+    # RAZORPAY_KEY_SECRET: str
+    # RAZORPAY_WEBHOOK_SECRET: Optional[str] = None
+    
+    # Subscription pricing (can be moved to database)
+    MONTHLY_PLAN_PRICE: float = 399.0
+    ANNUAL_PLAN_PRICE: float = 3999.0
+    CURRENCY: str = "INR"
+
 
     class Config:
         env_file = ".env"
