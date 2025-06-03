@@ -36,3 +36,5 @@ class User(UUIDModel):
     
     # Relationships
     scripts = relationship("Script", back_populates="user", cascade="all, delete-orphan")
+    subscriptions = relationship("UserSubscription", back_populates="user", cascade="all, delete-orphan")
+    ai_usage_logs = relationship("AIUsageLog", back_populates="user", cascade="all, delete-orphan")
