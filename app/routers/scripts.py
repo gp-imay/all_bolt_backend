@@ -4,6 +4,8 @@ from sqlalchemy.orm import Session
 from typing import List, Optional
 from uuid import UUID
 from typing import List
+from functools import partial
+
 
 from app.database import get_db
 from app.schemas.script import (
@@ -19,6 +21,11 @@ from app.services.azure_service import AzureStorageService
 from app.auth.dependencies import get_current_user
 from app.schemas.user import User
 from app.schemas.beat import ScriptWithBeatsResponse
+
+from app.auth.ai_guard import get_ai_call_guard
+from app.models.usage import AICallTypeEnum
+from app.services.usage_service import UsageService
+
 import time
 
 router = APIRouter()
@@ -153,12 +160,24 @@ async def upload_script_file(
 async def create_script_with_ai(
     script: ScriptCreate,
     current_user: User = Depends(get_current_user),
+    ai_guard=Depends(get_ai_call_guard),
     db: Session = Depends(get_db)
 ):
+
+
     """Create a new script with AI-generated beat sheet"""
-    return ScriptService.create_script_with_beats(
+    script_resp = ScriptService.create_script_with_beats(
         db=db, 
         script=script, 
         user_id=current_user.id
     )
 
+    # Log the AI call
+    UsageService.log_ai_call(
+        db=db,
+        user_id=current_user.id,
+        call_type=AICallTypeEnum.BEAT_GENERATION.value,
+        script_id=script_resp.id,
+        metadata={"script_title": script.title}
+    )
+    return script_resp
